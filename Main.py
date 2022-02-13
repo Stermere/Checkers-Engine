@@ -360,7 +360,6 @@ def dynamic_depth(start_time : float, depth : int, board : list, state : int, p_
         b, r, p = branches + b, leafs + r, prunned + p
         best_moves = m.get_list_best_moves()
         m = Minmax(board, 0, state, -1000, 1000, start_time=start_time, best_moves=best_moves, processing_time=p_time, transposition=t)
-    print(r + leafs)
     branches, leafs, prunned = b, r, p
     hashes = t.length()
     Minmax.MAX_DEPTH = default_depth
