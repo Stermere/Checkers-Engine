@@ -19,32 +19,29 @@ def numerical_eval(board, loc):
     for i in loc[0]:
         if board[i[0]][i[1]] == 3:
             score += 5
-            score += king_position(i, loc[1]) * 0.1
+            score += king_position(i, loc[1], board) * 0.1
         else:
             score += 3
         score += eval_piece_pos(i) * 0.1
     for i in loc[1]:
         if board[i[0]][i[1]] == 4:
             score -= 5
-            score -= king_position(i, loc[0]) * 0.1
+            score -= king_position(i, loc[0], board) * 0.1
         else:
             score -= 3
         score -= eval_piece_pos(i) * 0.1
     return score
 
 
-def king_position(loc, enemy_pieces):
-    lowest_dist = 100
-    closest_loc = ()
+def king_position(loc, enemy_pieces, board):
+    lowest_dist = 16
     for i in enemy_pieces:
-        dist = abs(loc[0] - i[0]) + abs(loc[1] - i[1])
-        if dist < lowest_dist:
-            lowest_dist = dist
-            closest_loc = i
-    dist = math.sqrt(math.pow((loc[1] - closest_loc[1]), 2)+\
-            math.pow((loc[0] - closest_loc[0]), 2))
-    dist = -(-11.313 + dist) / len(enemy_pieces)
-    return dist
+        if board[i[0]][i[1]] == 3 or board[i[0]][i[1]] == 4:
+            dist = abs(loc[0] - i[0]) + abs(loc[1] - i[1])
+            if dist < lowest_dist:
+                lowest_dist = dist
+
+    return -lowest_dist
 
 
 # returns the average distance from becoming a king for a player

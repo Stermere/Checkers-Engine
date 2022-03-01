@@ -1,13 +1,17 @@
 # a checkers engine using the minimax algorithm
 # developed by Collin Kees
 
-from time import process_time, sleep
 from copy import deepcopy
-from random import randrange
-import pygame
-from Static_board_eval import get_eval
+from tabnanny import check
+from time import process_time, sleep
 from Transposition_table import Transposition
-from Board_opperations import *
+from Minmax import Minmax
+from Monty_carlo import Monty_carlo
+from Board_opperations import Board, check_jump_required, generate_options, update_board, check_win, generate_all_options
+
+if __name__ == '__main__':
+    import pygame
+    import multiprocessing as mp
 
 
 class Player(): # class to deal with the visual elements for the human player
@@ -137,234 +141,134 @@ class Player(): # class to deal with the visual elements for the human player
                         pygame.draw.circle(self.screen, Player.C4, spot_on_screen, block_width / 2 - 20)
         pygame.display.update()
 
+# allows processing of wins until time runs out
+def dynamic_win(board : list, state : int, return_dict):
+    # get the child that is the new board state
+    montycarlo = Monty_carlo(state, board)
+    
+    wins_per_search = 50
+    while return_dict["done"] == False:
+        montycarlo.find_n_wins(wins_per_search)
+        return_dict["wins"] += wins_per_search
 
-class Minmax:
-    MAX_DEPTH = 5
-
-    def __init__(self, board : list, depth : int, state : int, alpha : float, beta : float,
-     last_move=None, start_time=None, best_moves=None, processing_time=1, only_jump=False, 
-     transposition=None, last_board=None, last_hash=None) -> None:
-        global leafs
-        global branches
-        self.start_time = start_time
-        self.transposition = transposition
-        self.last_move = last_move
-        self.best_moves = best_moves
-        self.processing_time = processing_time
-        self.board = board
-        self.hash = transposition.hash_from_hash(self.board, last_board, last_hash, last_move)
-        self.alpha = alpha
-        self.beta = beta
-        self.depth = depth
-        self.state = state
-        self.board_state = None
-        self.board_tree = None
-        if process_time() - start_time > self.processing_time:
-            self.board_state = 0
-            return
-        # recursive part of the init function
-        if check_win(self.board, self.state) != 0:
-            win_state = check_win(self.board, self.state)
-            # ensure that the shortest path to a win is taken rather than a long way
-            if win_state == 2:
-                self.board_state = -100 + self.depth
-            else:
-                self.board_state = 100 - self.depth
-            leafs += 1
-            return
-
-        if self.depth < Minmax.MAX_DEPTH:
-            branches += 1
-            self.board_tree = self.gen_tree(only_jump=only_jump)
-            if self.board_tree:
-                self.board_state = self.get_best_node()
-                branches += 1
-        else:
-            self.board_tree = self.gen_tree(only_jump=True)
-            if not self.board_tree:
-                self.board_state = self.eval_board()
-                leafs += 1
-            else:
-                self.board_state = self.get_best_node()
-                branches += 1
-                
-    # function to generate a tree of all the moves sorted in order from best to worst
-    # this works in corilation with alpha beta prunning to allow dynamic depth
-    def get_list_best_moves(self):
-        reverse_sort = lambda x : True if x == 1 else False
-        moves = []
-        moves.append(self.board_state)
-        moves.append(self.last_move)
-        moves.append([])
-        moves.append([])
-        if self.board_tree == None:
-            return moves
-        for i in self.board_tree:
-            moves[2].append((i.last_move, i.board_state))
-            move = i.get_list_best_moves()
-            moves[3].append(move)
-        # sort the moves from best to worst
-        moves[2].sort(key=lambda x : x[1], reverse=reverse_sort(self.state))
-        for x, m in enumerate(moves[2]):
-            moves[2][x] = tuple(m[0])
-
-        return moves
-        
-    # choose one of the actions that yields the highest board value
-    def choose_action(self) -> tuple:
-        actions = []
-        if self.state == 2:
-            best_node = 1000
-            for board in self.board_tree:
-                if board.board_state < best_node:
-                    best_node = board.board_state
-        else:
-            best_node = -1000
-            for board in self.board_tree:
-                if board.board_state > best_node:
-                    best_node = board.board_state
-        for board in self.board_tree:
-            if board.board_state == best_node:
-                actions.append(board.last_move)
-        if len(actions) == 0:
-            return False, None
-        move = actions[randrange(0, len(actions))]
-        jumped = update_board(move[0], move[1], self.board)
-        # allow the bot another turn if another jump by the same piece is possible
-        if jumped and check_jump_required(self.board, self.state, move[1]):
-            return True, move
-        return False, move
-             
-    # function that handles generation the branches of the current board state
-    def gen_tree(self, only_jump=False) -> list:
-        global prunned
-        invert_state = lambda x : 1 if x == 2 else 2
-        branches = []
-
-        # determine if the player must jump
-        if not only_jump:
-            only_jump = check_jump_required(self.board, self.state)
-            if only_jump:
-                only_jump = True
-            else:
-                only_jump = False
-
-        # generate moves or get from sorted move list of last search
-        gen_moves = True
-        if self.best_moves:
-            if self.best_moves[3]:
-                moves = self.best_moves[2]
-                moves_set = set(moves)
-                moves_all = generate_all_options(self.board, self.state, only_jump)
-                for item in moves_all:
-                    if not item in moves_set:
-                        moves.append(item)
-                gen_moves = False
-        if gen_moves:
-            moves = generate_all_options(self.board, self.state, only_jump)
-
-        min_eval = 1000
-        max_eval = -1000
-        # create the children of this board state
-        for move in moves:
-            board = deepcopy(self.board)
-            jumped = update_board(move[0], move[1], board)
-
-            # if the same piece that just moved jumped and can jump again let it!
-            check_jump = False
-            if jumped:
-                check_jump = check_jump_required(board, self.state, move[1])
-
-            if self.best_moves:
-                next_best_moves = self.get_next_best_moves(move, self.best_moves)
-            else:
-                next_best_moves = []
-
-            # if the piece that just jumped can jump again pass the same state to the next board if not invert the state
-            if check_jump:
-                child = Minmax(board, self.depth + 1, self.state, self.alpha, self.beta, last_move=[move[0], move[1]],\
-                     start_time=self.start_time, best_moves=next_best_moves, processing_time=self.processing_time,\
-                        transposition=self.transposition, last_hash=self.hash, last_board=self.board)
-            else:
-                child = Minmax(board, self.depth + 1, invert_state(self.state), self.alpha, self.beta, last_move=[move[0], move[1]],\
-                     start_time=self.start_time, best_moves=next_best_moves, processing_time=self.processing_time,\
-                        transposition=self.transposition, last_hash=self.hash, last_board=self.board)
-                     
-            branches.append(child)
-
-            # alpha beta prunning
-            if self.state == 1:
-                max_eval = max(max_eval, child.board_state)
-                self.alpha = max(self.alpha, max_eval)
-                if self.beta < self.alpha:
-                    prunned += 1
-                    break
-            if self.state == 2:
-                min_eval = min(min_eval, child.board_state)
-                self.beta = min(self.beta, min_eval)
-                if self.beta < self.alpha:
-                    prunned += 1
-                    break
-        return branches
-
-    def eval_board(self) -> float: # gives the board state a numerical value
-        score = self.transposition.get_value(self.hash)
-        if score == None:
-            score = get_eval(self.board)
-            self.transposition.store_hash(self.hash, score)
-        return score
-
-    def get_best_node(self) -> float:
-        if self.state == 2:
-            best_node = 1000
-            for board in self.board_tree:
-                if board.board_state < best_node:
-                    best_node = board.board_state
-        else:
-            best_node = -1000
-            for board in self.board_tree:
-                if board.board_state > best_node:
-                    best_node = board.board_state
-        return best_node
-
-    def get_next_best_moves(self, move, next_moves):
-        for item in next_moves[3]:
-            if item != None:
-                if move == tuple(item[1]):
-                    if len(item[3]) == 0:
-                        return None
-                    return item
-        return None
-
+    # save the object in a touple interpretation to sent it back to the main thread
+    return_data = return_dict["montycarlo"]
+    return_data.append((montycarlo.board, montycarlo.total_p1_win, montycarlo.total_p2_win))
+    return_dict["montycarlo"] = return_data
 
 # allows for processing to be stopped at a precice time without losing speed 
-def dynamic_depth(start_time : float, depth : int, board : list, state : int, p_time) -> tuple:
-    global branches, leafs, prunned, hashes
-    default_depth = Minmax.MAX_DEPTH
-    b, r, p = 0, 0, 0
+def dynamic_depth(depth : int, board : list, state : int, p_time, return_dict):
     hashes = 0
+    leafs = 0
+    prunned = 0
+    time = process_time()
 
-    Minmax.MAX_DEPTH = depth
+    Minmax.MAX_DEPTH = 1
+    board = deepcopy(board)
     t = Transposition()
-    m = Minmax(board, 0, state, -1000, 1000, start_time=start_time, processing_time=p_time, transposition=t)
+    m = Minmax(board, 0, state, -1000, 1000, start_time=time, processing_time=p_time, transposition=t, hash_=t.initial_hash)
     full_minmax = m
     # if there is only one move in the board tree Imidiatly return since there is no point in looking at future boards in that case
     if len(m.board_tree) == 1:
-        return full_minmax, depth
+        return_dict["minmax"] = (full_minmax, depth)
+        return_dict["leafs"] = leafs
+        return_dict["prunned"] = prunned
+        return_dict["hashes"] = hashes
+        return
 
     # continue to process until time constraints are realized
-    while process_time() - start_time < p_time:
+    while process_time() - time < p_time:
         depth += 1
         Minmax.MAX_DEPTH = depth
         full_minmax = m
-        b, r, p = branches + b, leafs + r, prunned + p
+        leafs, prunned = full_minmax.lp[0], full_minmax.lp[1]
         best_moves = m.get_list_best_moves()
-        m = Minmax(board, 0, state, -1000, 1000, start_time=start_time, best_moves=best_moves, processing_time=p_time, transposition=t)
-    branches, leafs, prunned = b, r, p
-    hashes = t.length()
-    Minmax.MAX_DEPTH = default_depth
+        m = Minmax(board, 0, state, -1000, 1000, start_time=time, best_moves=best_moves, processing_time=p_time, transposition=t, hash_=t.initial_hash)
 
-    return full_minmax, depth
+    hashes = t.length()
+
+    # update the return dict
+    return_dict["minmax"] = (full_minmax, depth)
+    return_dict["leafs"] = leafs
+    return_dict["prunned"] = prunned
+    return_dict["hashes"] = hashes
+
+
+# merge the weights from both three searches to get the 'ideal' move
+def merge_monty_and_minmax(montycarlo, minmax):
+    for child in montycarlo:
+        for mmchild in minmax[0].board_tree:
+            # monty carlo list is in the format [board, p1_wins, p2_wins]
+            if child[0] == mmchild.board:
+                # multiply the ratio of wins to loses by the boards state found by minmax
+                if child[1] > child[2]:
+                    if mmchild.board_state < 0:
+                        new_eval = mmchild.board_state * 0.1 / ((child[1] + 1) / (child[2] + 1))
+                    else:
+                        new_eval = mmchild.board_state * ((child[1] + 1) / (child[2] + 1))
+
+                else:
+                    if mmchild.board_state < 0:
+                        new_eval = mmchild.board_state * ((child[2] + 1) / (child[1] + 1))
+                    else:
+                        new_eval = mmchild.board_state / ((child[2] + 1) / (child[1] + 1))
+
+                print("p1 " , child[1] , " p2 " , child[2] , " origninal state " , mmchild.board_state, " new state ", new_eval)
+                
+                # update the eval
+                mmchild.board_state = new_eval
+
+
+# start the processing of the minimax and Monty Carlo tree search
+def start_processing(depth : int, board : list, state : int, p_time):
+    global hashes, leafs, prunned
+    manager = mp.Manager()
+    return_dict = manager.dict()
+
+    # generate the first depth of the montycarlo tree to split up processing
+    invert_state = lambda x : 1 if x == 2 else 2
+    if check_jump_required(board, state):
+        next_layer_boards = generate_all_options(board, state, True)
+        
+    else:
+        next_layer_boards = generate_all_options(board, state, False)      
+
+    # prepare the processes
+    minimax = mp.Process(target=dynamic_depth, args=(depth, board, state, p_time, return_dict, ))
+    montycarlo_list = []
+    return_dict["montycarlo"] = []
+    return_dict["wins"] = 0
+
+    for child in next_layer_boards:
+        board_ = deepcopy(board)
+        update_board(child[0], child[1], board_)
+        state_ = check_jump_required(board_, state, child[1])
+        if state_:
+            state_ = state
+        else:
+            state_ = invert_state(state) 
+        montycarlo_list.append(mp.Process(target=dynamic_win, args=(board_, state_, return_dict, )))
+
+    # start the processes
+    return_dict["done"] = False
+    minimax.start()
+    for child in montycarlo_list:
+        child.start()
+
+    # once minimax search ends montycarlo should end as well
+    minimax.join()
+    return_dict["done"] = True
+    for child in montycarlo_list:
+        child.join()
+
+    merge_monty_and_minmax(return_dict["montycarlo"], return_dict["minmax"])
+
+    # update hashes, leaves, and prunned branches
+    hashes = return_dict["hashes"]
+    leafs = return_dict["leafs"]
+    prunned = return_dict["prunned"]
+    return return_dict["minmax"]
+
 
 # print the trace leading to the initial board eval of a search (used for debugging)
 def print_board_tree(player):
@@ -386,7 +290,6 @@ def print_board_tree(player):
                 
                 
 
-
 def main() -> None:
     global leafs, branches, prunned, hashes
     prunned = 0
@@ -403,7 +306,7 @@ def main() -> None:
 
     # True to have the game play against itself
     BOT_PLAYING = False
-    P_TIME = 3
+    P_TIME = 2.5
 
     while True:
         # check for quit 
@@ -423,8 +326,8 @@ def main() -> None:
             # Note: only have one ennabled or bad stuff happens
             # for bot on bot
             if BOT_PLAYING:
-                time = process_time()
-                player3, depth_reached = dynamic_depth(time, 4, board.board, 1, P_TIME)
+                player3, depth_reached = start_processing(4, board.board, 1, P_TIME)
+                player3.board = board.board
                 turn, i = player3.choose_action()
                 player1.limited_options = [i[0], i[1]]
                 branches, leafs, prunned = 0, 0, 0
@@ -437,15 +340,16 @@ def main() -> None:
 
         else:
             # the bot
-            time = process_time()
-            player2, depth_reached = dynamic_depth(time, 4, board.board, 2, P_TIME)
+            player2, depth_reached = start_processing(4, board.board, 2, P_TIME)
 
             # uncomment to see the trace of boards leading to the expected state
             #print_board_tree(player2)
 
+            # update the board to the board to the main board
+            player2.board = board.board
             turn, i = player2.choose_action()
             player1.red_blocks += i[0], i[1]
-            print(f'processing time: {process_time() - time} seconds')
+            print(f'time allowed for processing {P_TIME} seconds')
             print(f'Total branches Prunned: {prunned}')
             print(f'Hashes Generated: {hashes}')
             print(f'Boards Evaluated: {leafs}')
@@ -476,6 +380,7 @@ def main() -> None:
             board.reset_board(player1, player2)
             player1 = Player(board.board, size, clock, screen, 1)
             player = 1
+
         elif win == 2:
             player1.draw()
             print('player two wins')
@@ -483,6 +388,6 @@ def main() -> None:
             board.reset_board(player1, player2)
             player1 = Player(board.board, size, clock, screen, 1)
             player = 1
-        
+
 if __name__ == '__main__':
     main()

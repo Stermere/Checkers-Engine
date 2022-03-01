@@ -16,15 +16,10 @@ class Transposition():
     def store_hash(self, board_hash, value):
         self.table[board_hash] = value
 
-    def hash_from_hash(self, board, last_board, last_hash, move):
-        # if there is no previus move return the initial hash since after the first move is generated
-        # there should always be a previus move and hash combo
-        if move == None or last_hash == None or last_board == None:
-            return self.initial_hash
-        # update the hash
+    def hash_from_hash(self, board, jumped_piece, hash_value, move):
+        # get some data needed to update the hash
         piece = board[move[1][1]][move[1][0]]
         move_dist = abs(move[0][0] - move[1][0])
-        hash_value = last_hash
 
         # update the hash
         hash_value = self.change_bin_value(piece, self.board_val(move[1]), hash_value)
@@ -32,9 +27,8 @@ class Transposition():
 
         # if the last move was a jump update the position inbetween
         if move_dist == 2:
-            y = int((move[0][1] + move[1][1]) / 2)
-            x = int((move[0][0] + move[1][0]) / 2)
-            jumped_piece = last_board[y][x]
+            y = (move[0][1] + move[1][1]) // 2
+            x = (move[0][0] + move[1][0]) // 2
             hash_value = self.change_bin_value(jumped_piece, self.board_val((x, y)), hash_value)
         return hash_value
 

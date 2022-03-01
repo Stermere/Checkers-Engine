@@ -12,14 +12,23 @@ class Board: # class to store the board data and update it accordingly
                       [1, 0, 1, 0, 1, 0, 1, 0]]
 
         # test board for endgame positions
+        #self.board = [[0, 0, 0, 0, 0, 0, 0, 2],
+        #              [2, 0, 2, 0, 2, 0, 2, 0],
+        #              [0, 2, 0, 2, 0, 2, 0, 2],
+        #              [0, 0, 0, 0, 0, 0, 0, 0],
+        #              [0, 0, 0, 0, 0, 0, 0, 0],
+        #              [1, 0, 1, 0, 1, 0, 1, 0],
+        #              [0, 1, 0, 1, 0, 1, 0, 1],
+        #              [1, 0, 1, 0, 1, 0, 1, 0]]
+
         #self.board = [[0, 0, 0, 0, 0, 0, 0, 0],
         #              [0, 0, 0, 0, 3, 0, 0, 0],
-        #              [0, 0, 0, 0, 0, 0, 0, 2],
-        #              [0, 0, 4, 0, 0, 0, 0, 0],
         #              [0, 0, 0, 0, 0, 0, 0, 0],
-        #              [0, 0, 0, 0, 3, 0, 0, 0],
+        #              [0, 0, 0, 0, 4, 0, 0, 0],
+        #              [0, 0, 0, 2, 0, 0, 0, 0],
         #              [0, 0, 0, 0, 0, 0, 0, 0],
-        #              [0, 0, 0, 0, 4, 0, 0, 0]]
+        #              [0, 0, 0, 0, 0, 0, 0, 0],
+        #              [0, 0, 0, 0, 1, 0, 0, 0]]
                     
     def reset_board(self, p1 : object, p2 : object) -> None:
         self.__init__()
@@ -132,6 +141,7 @@ def check_win(board : list, next_player : int) -> int:
     else:
         return 0
 
+
 def is_enemy_piece(piece, other_piece):
     if (piece == 1 or piece == 3) and (other_piece == 2 or other_piece == 4):
         return True
@@ -139,3 +149,14 @@ def is_enemy_piece(piece, other_piece):
         return True
     else:
         return False
+
+
+def undo_update_board(move, jumped_piece, jumped_piece_loc, moving_piece, board):
+    # undo the main move
+    board[move[0][1]][move[0][0]] = moving_piece
+    board[move[1][1]][move[1][0]] = 0
+
+    # if the move was a jump revert the piece that was jumped
+    if not jumped_piece == None:
+        board[jumped_piece_loc[1]][jumped_piece_loc[0]] = jumped_piece
+
