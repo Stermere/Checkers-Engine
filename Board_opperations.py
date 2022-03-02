@@ -134,9 +134,9 @@ def check_win(board : list, next_player : int) -> int:
                 if o:
                     p2 = True
 
-    if next_player == 1 and not p1 and p2:
+    if next_player == 1 and not p1:
         return 2
-    elif next_player == 2 and not p2 and p1:
+    elif next_player == 2 and not p2:
         return 1
     else:
         return 0
