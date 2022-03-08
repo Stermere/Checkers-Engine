@@ -2,7 +2,6 @@
 # developed by Collin Kees
 
 from copy import deepcopy
-from tabnanny import check
 from time import process_time, sleep
 from Transposition_table import Transposition
 from Minmax import Minmax
@@ -142,12 +141,13 @@ class Player(): # class to deal with the visual elements for the human player
         pygame.display.update()
 
 # allows processing of wins until time runs out
-def dynamic_win(board : list, state : int, return_dict):
+def dynamic_win(board : list, state : int, return_dict, p_time : float):
     # get the child that is the new board state
+    time = process_time()
     montycarlo = Monty_carlo(state, board)
     
-    wins_per_search = 50
-    while return_dict["done"] == False:
+    wins_per_search = 10
+    while process_time() - time < p_time:
         montycarlo.find_n_wins(wins_per_search)
         return_dict["wins"] += wins_per_search
 
@@ -170,7 +170,8 @@ def dynamic_depth(depth : int, board : list, state : int, p_time, return_dict):
     full_minmax = m
     # if there is only one move in the board tree Imidiatly return since there is no point in looking at future boards in that case
     if len(m.board_tree) == 1:
-        return_dict["minmax"] = (full_minmax, depth)
+        return_dict["minmax"] = full_minmax
+        return_dict["depth"] = 0
         return_dict["leafs"] = leafs
         return_dict["prunned"] = prunned
         return_dict["hashes"] = hashes
@@ -181,14 +182,15 @@ def dynamic_depth(depth : int, board : list, state : int, p_time, return_dict):
         depth += 1
         Minmax.MAX_DEPTH = depth
         full_minmax = m
-        leafs, prunned = full_minmax.lp[0], full_minmax.lp[1]
+        leafs, prunned = leafs + full_minmax.lp[0], prunned + full_minmax.lp[1]
         best_moves = m.get_list_best_moves()
         m = Minmax(board, 0, state, -1000, 1000, start_time=time, best_moves=best_moves, processing_time=p_time, transposition=t, hash_=t.initial_hash)
 
     hashes = t.length()
 
     # update the return dict
-    return_dict["minmax"] = (full_minmax, depth)
+    return_dict["minmax"] = full_minmax
+    return_dict["depth"] = depth
     return_dict["leafs"] = leafs
     return_dict["prunned"] = prunned
     return_dict["hashes"] = hashes
@@ -197,7 +199,7 @@ def dynamic_depth(depth : int, board : list, state : int, p_time, return_dict):
 # merge the weights from both three searches to get the 'ideal' move
 def merge_monty_and_minmax(montycarlo, minmax):
     for child in montycarlo:
-        for mmchild in minmax[0].board_tree:
+        for mmchild in minmax.board_tree:
             # monty carlo list is in the format [board, p1_wins, p2_wins]
             if child[0] == mmchild.board:
                 # multiply the ratio of wins to loses by the boards state found by minmax
@@ -247,7 +249,7 @@ def start_processing(depth : int, board : list, state : int, p_time):
             state_ = state
         else:
             state_ = invert_state(state) 
-        montycarlo_list.append(mp.Process(target=dynamic_win, args=(board_, state_, return_dict, )))
+        montycarlo_list.append(mp.Process(target=dynamic_win, args=(board_, state_, return_dict, p_time, )))
 
     # start the processes
     return_dict["done"] = False
@@ -267,7 +269,7 @@ def start_processing(depth : int, board : list, state : int, p_time):
     hashes = return_dict["hashes"]
     leafs = return_dict["leafs"]
     prunned = return_dict["prunned"]
-    return return_dict["minmax"]
+    return return_dict["minmax"], return_dict["depth"], return_dict["wins"]
 
 
 # print the trace leading to the initial board eval of a search (used for debugging)
@@ -304,9 +306,17 @@ def main() -> None:
     board = Board()
     player1 = Player(board.board, size, clock, screen, 1) # must be initialized regardless of if a human is playing or not
 
+    # variables to keep track of some data that will be needed to train the neral net (also nice to display some stats while playing if you want)
+    p1_wins = 0
+    p2_wins = 0
+    turns = 0
+    board_at_turn = []
+    pieces_at_turn = []
+
+
     # True to have the game play against itself
     BOT_PLAYING = False
-    P_TIME = 2.5
+    P_TIME = 3
 
     while True:
         # check for quit 
@@ -326,7 +336,7 @@ def main() -> None:
             # Note: only have one ennabled or bad stuff happens
             # for bot on bot
             if BOT_PLAYING:
-                player3, depth_reached = start_processing(4, board.board, 1, P_TIME)
+                player3, depth_reached, monty_carlo = start_processing(4, board.board, 1, P_TIME)
                 player3.board = board.board
                 turn, i = player3.choose_action()
                 player1.limited_options = [i[0], i[1]]
@@ -340,7 +350,7 @@ def main() -> None:
 
         else:
             # the bot
-            player2, depth_reached = start_processing(4, board.board, 2, P_TIME)
+            player2, depth_reached, monty_carlo = start_processing(4, board.board, 2, P_TIME)
 
             # uncomment to see the trace of boards leading to the expected state
             #print_board_tree(player2)
@@ -353,7 +363,11 @@ def main() -> None:
             print(f'Total branches Prunned: {prunned}')
             print(f'Hashes Generated: {hashes}')
             print(f'Boards Evaluated: {leafs}')
-            print(f'predicted board state: {round(player2.board_state, 4)}')
+            print(f'ends found with montycarlo search: {monty_carlo}')
+            if depth_reached == 0:
+                print('predicted board state: Unknown')
+            else:
+                print(f'predicted board state: {round(player2.board_state, 4)}')
             print(f'depth reached: {depth_reached}\n')
             print('-'*50 + '\n')
 
