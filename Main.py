@@ -147,7 +147,7 @@ def dynamic_win(board : list, state : int, return_dict, p_time : float):
     montycarlo = Monty_carlo(state, board)
     
     wins_per_search = 10
-    while process_time() - time < p_time:
+    while process_time() - time < p_time and return_dict["depth"] != 0:
         montycarlo.find_n_wins(wins_per_search)
         return_dict["wins"] += wins_per_search
 
@@ -240,6 +240,7 @@ def start_processing(depth : int, board : list, state : int, p_time):
     montycarlo_list = []
     return_dict["montycarlo"] = []
     return_dict["wins"] = 0
+    return_dict["depth"] = 1
 
     for child in next_layer_boards:
         board_ = deepcopy(board)
