@@ -1,9 +1,9 @@
 # class that handels the minimax tree searching
 
 # really needs to be refactored aka rewriten for effeciency
+# this code is old and bad like really really bad it should be replced in the next major update
 
 from time import process_time
-from copy import deepcopy
 from random import randrange
 from Static_board_eval import get_eval
 from Board_opperations import *
@@ -21,6 +21,7 @@ class Minmax:
         self.transposition = transposition
         self.last_move = last_move
         self.best_moves = best_moves
+        self.next_moves = []
         self.processing_time = processing_time
         self.board = board
         self.hash = hash_
@@ -65,16 +66,25 @@ class Minmax:
         moves.append(self.last_move)
         moves.append([])
         moves.append([])
+        all_possible_moves = set(self.next_moves)
         if self.board_tree == None:
             return moves
+        # add the explored moves in the the list
         for i in self.board_tree:
             moves[2].append((i.last_move, i.board_state))
             move = i.get_list_best_moves()
             moves[3].append(move)
+            all_possible_moves.remove(tuple(i.last_move))
         # sort the moves from best to worst
         moves[2].sort(key=lambda x : x[1], reverse=reverse_sort(self.state))
+
+        # add the prunned moves as well just after the sort so they are checked last as if they where prunned that indicated a bad move
+        for i in all_possible_moves:
+            moves[2].append((i, 0))
+        # convert moves back to a usable form
         for x, m in enumerate(moves[2]):
             moves[2][x] = tuple(m[0])
+
 
         return moves
         
@@ -122,14 +132,12 @@ class Minmax:
         if self.best_moves:
             if self.best_moves[3]:
                 moves = self.best_moves[2]
-                moves_set = set(moves)
-                moves_all = generate_all_options(self.board, self.state, only_jump)
-                for item in moves_all:
-                    if not item in moves_set:
-                        moves.append(item)
                 gen_moves = False
         if gen_moves:
             moves = generate_all_options(self.board, self.state, only_jump)
+
+        # save the moves so that in the next depth iteration there is no need to regenerate any moves
+        self.next_moves = moves
 
         min_eval = 1000
         max_eval = -1000
@@ -168,6 +176,13 @@ class Minmax:
                      start_time=self.start_time, best_moves=next_best_moves, processing_time=self.processing_time,\
                         transposition=self.transposition, hash_=new_hash, lp=self.lp)
             branches.append(child)
+
+            # print board if child.board_state is none
+            if child.board_state == None:
+                for item in self.board:
+                    print(item)
+
+
 
             # undo the move that was made to the board
             undo_update_board(move, jumped_piece, jumped_piece_loc, moving_piece_start_type, self.board)

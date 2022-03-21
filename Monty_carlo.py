@@ -1,6 +1,5 @@
 # class that handles the monty carlo tree search algorithm
 
-from distutils.command import check
 from Board_opperations import *
 from random import randrange
 from copy import deepcopy
