@@ -39,6 +39,7 @@ class Gui(): # class to deal with the visual elements for the human player
         self.montycarlop2 = 0
         self.depth = 0
         self.eval = 0
+        self.win_messsage = ""
 
         self.draw()
 
@@ -169,6 +170,9 @@ class Gui(): # class to deal with the visual elements for the human player
             (self.size[1] + 10, self.size[1]/8 * 5))
         self.screen.blit(pygame.font.SysFont('Corbel', 16).render(str(round(self.eval, 4)), True, (0, 0, 0)),
                     (self.size[1] + 20, self.size[1]/8 * 5.5))
+        # win message
+        self.screen.blit(pygame.font.SysFont('Corbel', 20).render(self.win_messsage, True, (0, 0, 0)),
+                    (self.size[1] + 20, self.size[1]/8 * 6.5))
 
         pygame.display.update()
 

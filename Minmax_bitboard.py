@@ -366,7 +366,7 @@ class Minmax:
 
             # update the output dict for live gui updates
             output["leafs"] = self.nodes_traversed
-            output["hashes"] = 0
+            output["hashes"] = self.evaluator.num_hashes
             output["depth"] = self.highest_depth
             output["eval"] = self.eval
             output["best_move"] = self.best_move
@@ -375,8 +375,6 @@ class Minmax:
                                     self.initial_board[2], self.initial_board[3], piece_loc, offset_dict, settled_best_moves)
 
 
-
-        
 # generates every board to n ply down
 def generate_n_ply(player, p1bits, p1kbits, p2bits, p2kbits, piece_loc, offsets, depth):
     boards = 0

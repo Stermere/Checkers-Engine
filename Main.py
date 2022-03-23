@@ -4,7 +4,6 @@
 
 from copy import deepcopy
 from time import process_time, sleep
-from Transposition_table import Transposition
 from Minmax_bitboard import Minmax
 from Monty_carlo import Monty_carlo
 from Board_opperations import Board, check_jump_required, update_board, check_win, generate_all_options
@@ -84,8 +83,6 @@ def merge_monty_and_minmax(montycarlo, minmax, player):
 
     # update the best move attribute
     minmax.best_move = best_move
-    
-    print(minmax.best_move, minmax.eval)
 
 
 # start the processing of the minimax and Monty Carlo tree search
@@ -227,13 +224,11 @@ def main() -> None:
             gui.red_blocks += chosen_move[0], chosen_move[1]
             print(f'time allowed for processing {P_TIME} seconds')
             print(f'Total branches Prunned: {0}')
-            print(f'Hashes Generated: {0}')
+            # print the total boards evaled including the last incompleted search
+            print(f'Hashes Generated: {player2.evaluator.num_hashes}')
             print(f'Boards Evaluated: {player2.nodes_traversed}')
             print(f'ends found with montycarlo search: {monty_carlo[0] + monty_carlo[1]}')
-            if player2.highest_depth == 0:
-                print('predicted board state: Unknown')
-            else:
-                print(f'predicted board state: {round(player2.eval, 4)}')
+            print(f'predicted board state: {round(player2.eval, 4)}')
             print(f'depth reached: {player2.highest_depth}\n')
             print('-'*50 + '\n')
 
@@ -250,9 +245,16 @@ def main() -> None:
         # check for a win
         win = check_win(board.board, player)
         if win == 1:
-            gui.draw()
+            # make another pygame loop for showing the win message
+            start_time = process_time()
+            gui.win_messsage = "Player one wins!"
+            while process_time() - start_time < 3:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        quit()
+                gui.draw()
             print('player one wins')
-            sleep(3)
             board.reset_board(gui, player2)
             gui = Gui(board.board, size, clock, screen, 1)
             player = 1
@@ -260,9 +262,16 @@ def main() -> None:
             turns = 0
 
         elif win == 2:
-            gui.draw()
+            # make another pygame loop for showing the win message
+            start_time = process_time()
+            gui.win_messsage = "Player two wins!"
+            while process_time() - start_time < 3:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        quit()
+                gui.draw()
             print('player two wins')
-            sleep(3)
             board.reset_board(gui, player2)
             gui = Gui(board.board, size, clock, screen, 1)
             player = 1
