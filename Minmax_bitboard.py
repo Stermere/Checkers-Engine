@@ -350,10 +350,6 @@ class Minmax:
         # if there is only one move available dont search furth just return the move
         if len(prev_best_moves[2]) == 1:
             self.update_info(prev_best_moves, eval_, depth)
-            output["leafs"] = self.nodes_traversed
-            output["hashes"] = 0
-            output["depth"] = self.highest_depth
-            output["eval"] = self.eval
             output["best_move"] = self.best_move
             return
 
