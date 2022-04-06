@@ -13,37 +13,53 @@ struct set {
 };
 
 // remove a value from the set
-void remove(struct set *s, int x){
-    int flag = 1;
-    struct set *temp = s;
-    s = s->next;
-    while(flag){
-        if (s->value == x){
-            temp->next = s->next;
-            free(s);
-            flag = 0;
-        }
-        else{
-            temp = s;
-            s = s->next;
-        }
-    }
+void set_remove(struct set *s, int x){
+    // if the set head value is the value to remove do nothing
+    if (x == -1) return;
+
+     // remove the value from the set
+     struct set *temp = s;
+     while(temp->next != NULL){
+         if (temp->next->value == x){
+             struct set *temp2 = temp->next;
+             temp->next = temp->next->next;
+             free(temp2);
+         }
+         else{
+             temp = temp->next;
+         }
+     }
+
 }
 
 // add a value to the set
 // this function assumes your value is not already in the set
 // so it is an unsafe add
-void add(struct set *s, int x){
-    struct set *new_ = (struct set*)malloc(sizeof(struct set));
+void set_add(struct set *s, int x){
+    // make a new node and give it the value x and put it in the begining of the set
+    struct set *new_ = malloc(sizeof(struct set));
     new_->value = x;
-    new_->next = s;
+    struct set* temp = s->next;
+    s->next = new_;
+    new_->next = temp;
 }
 
+// create a set
 struct set* create_set(){
-    struct set *s = (struct set*)malloc(sizeof(struct set));
+    struct set *s = malloc(sizeof(struct set));
     s->next = NULL;
     s-> value = -1;
     return s;
+}
+
+// print the set
+void print_set(struct set *s){
+    struct set *temp = s->next;
+    while(temp != NULL){
+        printf("%d ", temp->value);
+        temp = temp->next;
+    }
+    printf("\n");
 }
 
 
