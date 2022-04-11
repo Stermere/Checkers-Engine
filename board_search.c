@@ -1,15 +1,21 @@
+// Author: Collin Kees
+// language: c
+// Description: this program serves as the C library for move generation and evaluation of checkers boards
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <math.h>
-#include "Cset.h"
+#include "Cboard_eval.h"
 
 // define some constants
 #define intLong long long
 #define True 1
 #define False 0
 #define Null 0
+#define min(a,b) (((a)<(b))?(a):(b))
+#define max(a,b) (((a)>(b))?(a):(b))
 
 /*
 #define PY_SSIZE_T_CLEAN
@@ -28,14 +34,16 @@ int get_next_board_state(intLong p1, intLong p2, intLong p1k, intLong p2k, int p
 int get_piece_at_location(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos);
 int update_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece_loc_initial, int piece_loc_after);
 void undo_board_update(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece_loc_initial, int piece_loc_after, int jumped_piece_type);
-int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, int* moves, struct set* piece_loc, int* offsets);
+int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, int* moves, struct set* piece_loc, int* offsets, int jump);
 int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, int* save_loc, int* offsets, int only_jump);
-struct board_data* search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
-                                int* piece_loc, int* offsets, int depth,
-                                float alpha, float beta, struct board_data* best_moves);
+float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
+    struct set* piece_loc, int* offsets, int depth, float alpha, float beta, int captures_only, struct board_data* best_moves,
+    struct board_evaler* evaler);
 struct board_data* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player);
 void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k);
 long long n_ply_search(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player, struct set* piece_loc, int* offsets, int depth);
+void merge(struct board_data* ptr, int half, int num_elements);
+void quicksort(struct board_data* ptr, int num_elements);
 
 
 /*
@@ -84,11 +92,12 @@ PyInit_board_search(void){
 // the point of this struct is to make a tree of moves that have been traversed and pass it to the next deaper search
 // so that more prunning occurs and the search is faster
 struct board_data {    
-    float score;
+    float eval;
     int player;
     int move_start;
     int move_end;
     int num_moves;
+    int prunned_loc;
     struct board_data *next_boards;
 };
 // constructor for the board_data struct. sets the start/end move, and player variables as these are not going to change.
@@ -97,10 +106,11 @@ struct board_data {
 // corisponding to the next possible moves the array should then be sorted according to the score of the move
 struct board_data *board_data_constructor(int player, int move_start, int move_end){
     struct board_data *board = malloc(sizeof(struct board_data));
-    board->score = 0;
+    board->eval = 0;
     board->player = player;
     board->move_start = move_start;
     board->move_end = move_end;
+    board->num_moves = -1;
     return board;
 }
 
@@ -143,6 +153,7 @@ void compute_offsets(int* offsets){
 // note: assumes a valid board
 struct set* get_piece_locations(intLong p1, intLong p2, intLong p1k, intLong p2k){
     struct set* piece_loc = create_set();
+    piece_loc->value = -1;
     for (int i = 0; i < 64; i++){
         if (get_piece_at_location(p1, p2, p1k, p2k, i) != 0){
             set_add(piece_loc, i);
@@ -165,6 +176,7 @@ void update_piece_locations(int piece_loc_initial, int piece_loc_after, struct s
     // remove the piece that was moved from the set and add its new location to the set
     set_remove(piece_loc, piece_loc_initial);
     set_add(piece_loc, piece_loc_after);
+
 }
 
 // undo a update the the array of piece locations
@@ -184,10 +196,94 @@ void undo_piece_locations_update(int piece_loc_initial, int piece_loc_after, str
     set_add(piece_loc, piece_loc_initial);
 }
 
-// sorts the pointers in a board_data struct array according to the score of the move's
-// each pointer points to and the player that is making the move
+// takes a pointer to the board_data struct that we want to sort the moves for 
+// sorts the array according to the score of the move
+// the pointer to the array that is passed is still the pointer to the array of board_data structs
+// uses the quicksort algorithm
 void sort_moves(struct board_data* ptr, int player){
+    struct board_data temp;
+    int made_swap = 1;
+    struct board_data* board_data_list = ptr->next_boards;
+    // if the player is player 2 we want the moves from least to greatest
+    // if the player is player 1 we want the moves from greatest to least
+    // to do this we can multiply the evals by -1 sort them and then multiply the evals back by -1
+    if (player == 2){
+        for (int i = 0; i < ptr->num_moves; i++){
+            board_data_list[i].eval = board_data_list[i].eval * -1;
+        }
+    }
+    // use the quicksort algorithm to sort the moves
+    quicksort(board_data_list, ptr->num_moves);
 
+    // undo the multiplication by the player variable
+    if (player == 2){
+        for (int i = 0; i < ptr->num_moves; i++){
+            board_data_list[i].eval = board_data_list[i].eval * -1;
+        }
+    }
+}
+
+// the quicksort recursive funtion
+// takes the pointer to the board_data array and the number of elements in the array
+void quicksort(struct board_data* ptr, int num_elements){
+    // base case
+    if (num_elements <= 1){
+        return;
+    }
+    // recursive case
+    // split the array into two halves
+    int half = num_elements / 2;
+    // sort the two halves
+    quicksort(ptr, half);
+    quicksort(ptr + half, num_elements - half);
+    // merge the two sorted halves
+    merge(ptr, half, num_elements - half);
+
+}
+
+// the merge part of the quicksort algorithm
+void merge(struct board_data* ptr, int half, int num_elements){
+    // create two arrays to hold the two halves of the array
+    struct board_data* left = malloc(sizeof(struct board_data) * half);
+    struct board_data* right = malloc(sizeof(struct board_data) * num_elements - half);
+    // copy the left half of the array into the left array
+    for (int i = 0; i < half; i++){
+        left[i] = ptr[i];
+    }
+    // copy the right half of the array into the right array
+    for (int i = 0; i < num_elements - half; i++){
+        right[i] = ptr[half + i];
+    }
+    // merge the two sorted halves
+    int left_index = 0;
+    int right_index = 0;
+    int index = 0;
+    while (left_index < half && right_index < num_elements - half){
+        if (left[left_index].eval > right[right_index].eval){
+            ptr[index] = left[left_index];
+            left_index++;
+        }
+        else{
+            ptr[index] = right[right_index];
+            right_index++;
+        }
+        index++;
+    }
+    // copy the rest of the left array into the array
+    while (left_index < half){
+        ptr[index] = left[left_index];
+        left_index++;
+        index++;
+    }
+    // copy the rest of the right array into the array
+    while (right_index < num_elements - half){
+        ptr[index] = right[right_index];
+        right_index++;
+        index++;
+    }
+    // free the two arrays
+    free(left);
+    free(right);
 }
 
 // find the state of the next board after a move
@@ -292,38 +388,38 @@ void undo_board_update(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int
 // takes the board and a memory location to save to as arguments
 // returns the number of moves generated
 // note: moves should have room for 96 elements as this is the maximum number of moves possible on a legal board
-int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, int* moves, struct set* piece_loc, int* offsets){
+int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, int* moves, struct set* piece_loc, int* offsets, int jump){
     // setup variables
     int num_moves = 0;
     int move_from_pos = 0;
     int type;
-    int jump = 0;
     int friendly_pieces;
     if (player == 1){
         friendly_pieces = 3;
     } else {
         friendly_pieces = 4;
     }
+    int piece_loc_array[64];
+    int num_pieces = populate_array(piece_loc, piece_loc_array);
+
     // loop over all the locations with a piece and generate the moves for each one
-    while (piece_loc != Null){
+    for (int i = 0; i < num_pieces; i++){
         // check if it is a valid piece
-        type = get_piece_at_location(p1, p2, p1k, p2k, piece_loc->value);
+        type = get_piece_at_location(p1, p2, p1k, p2k, piece_loc_array[i]);
         if (type == player || type == friendly_pieces){
             // generate the moves for the piece
-            move_from_pos = generate_moves(p1, p2, p1k, p2k, piece_loc->value, moves + (num_moves * 2), offsets, jump);
+            move_from_pos = generate_moves(p1, p2, p1k, p2k, piece_loc_array[i], moves + (num_moves * 2), offsets, jump);
             if (move_from_pos == -1){
                 num_moves = 0;
                 jump = 1;
-                move_from_pos = generate_moves(p1, p2, p1k, p2k, piece_loc->value, moves + (num_moves * 2), offsets, jump);
+                move_from_pos = generate_moves(p1, p2, p1k, p2k, piece_loc_array[i], moves + (num_moves * 2), offsets, jump);
                 num_moves += move_from_pos;
             }
             // if no special cases occured add the moves to the counter
             else {
                 num_moves += move_from_pos;
             }
-        }
-        piece_loc = piece_loc->next;
-        
+        }    
     }
     return num_moves;
 }
@@ -395,13 +491,130 @@ int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, in
     return num_moves;
 }
 
-// search the board for the best move recursivly and return a pointer to the memory
-// location that holds the moves for the board ordered in the order best to worst
-struct board_data* search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
-                                int* piece_loc, int* offsets, int depth,
-                                float alpha, float beta, struct board_data* best_moves){
+// search the board for the best move recursivly and return the best eval that can be achived from that board position
+// the best_moves struct will be populated to the search depth at the end of this search
+float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
+    struct set* piece_loc, int* offsets, int depth, float alpha, float beta, int captures_only, struct board_data* best_moves,
+    struct board_evaler* evaler){
+    // setup variables
+    int player_next;
+    float board_eval = 0.0;
+    int num_moves;
+    float min_eval = 1000.0;
+    float max_eval = -1000.0;
+    struct board_data* temp_board;
     // if the depth is 0 then we are at the end of the standard search so begin the captures search
+    if (depth <= 0){
+        captures_only = True;
+    }
+    // get the moves for this board and player combo or use the moves generated from the last depth search
+    if (best_moves->num_moves == -1){
+        int moves[96];
+        num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, offsets, captures_only);
+        // put all the moves into the best moves struct and fill this layer of the tree to the extent that we can
+        if (!captures_only){
+            best_moves->num_moves = num_moves;
+        }
+        best_moves->player = player;
 
+        if (num_moves > 0){
+            best_moves->next_boards = malloc(sizeof(struct board_data) * num_moves);  
+        }
+        // fill the next boards with the moves that got them there
+        for (int i = 0; i < num_moves; i++){
+            temp_board = best_moves->next_boards + i;
+            temp_board->move_start = moves[i * 2];
+            temp_board->move_end = moves[(i * 2) + 1];
+            temp_board->num_moves = -1;
+            temp_board->player = -1;
+        }
+    }
+    // if moves where already in the move tree then use them
+    else{
+        num_moves = best_moves->num_moves;
+        // sort moves here (optimizatizes alpha beta prunning if better move's are looked at first)
+        // only sort the moves that where evaluated as moves after a prune should be considered low eval for the player
+        sort_moves(best_moves, best_moves->prunned_loc);
+    }
+    // if there are no move then a player must have won, or there are no captures so end this branch (only count as a win if captures_only is false)
+    // this is not a perfect check but it should be good enough (ie a player has a piece with no legal moves and we are looking at the captures search)
+    // this one case should be fairly rare so it is not worth the extra time that would be taken to check for it (ie the search will go search deaper and thus find the move anyways)
+    if (num_moves == 0){
+        // if there are no moves and captures only is false then a win has occured eval who won and return
+        if (!captures_only){
+            if (player == 1){
+                board_eval = -100.0;
+            }
+            else{
+                board_eval = 100.0;
+            }
+            evaler->boards_evaluated += 1;
+            best_moves->eval = board_eval;
+            
+            return board_eval;
+        }
+        // if there are no moves and captures only is true then we found the end of a catures only search evaluate the position and return
+        else{
+            board_eval = get_eval(*p1, *p2, *p1k, *p2k, piece_loc, evaler);
+            best_moves->eval = board_eval;
+            evaler->boards_evaluated += 1;
+            return board_eval;
+        }
+    }
+    temp_board = best_moves->next_boards;
+    // if there are moves then we need to search them all
+    for (int i = 0; i < num_moves; i++){
+        // get the board data for the next move
+        temp_board = best_moves->next_boards + i;
+
+        // update the board and set values
+        int jumped_piece_type = update_board(p1, p2, p1k, p2k, temp_board->move_start, temp_board->move_end);
+        update_piece_locations(temp_board->move_start, temp_board->move_end, piece_loc);
+
+        // get the player that is going to move after this move
+        if (temp_board->player != -1){
+            player_next = temp_board->player;
+        }
+        else{
+            player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, temp_board->move_start, temp_board->move_end, player, offsets);
+            temp_board->player = player_next;
+        }
+        // call the function recursivly 
+        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth - 1, alpha, beta, captures_only, temp_board, evaler);
+        
+        // undo the update to the board and piece locations
+        undo_piece_locations_update(temp_board->move_start, temp_board->move_end, piece_loc);
+        undo_board_update(p1, p2, p1k, p2k, temp_board->move_start, temp_board->move_end, jumped_piece_type);
+
+        // alpha beta prunning
+        if (player == 1){
+            max_eval = max(max_eval, temp_board->eval);
+            alpha = max(alpha, max_eval);
+            if (alpha > beta){
+                best_moves->prunned_loc = i + 1;
+                break;
+            }
+        }
+        else{
+            min_eval = min(min_eval, temp_board->eval);
+            beta = min(beta, min_eval);
+            if (alpha > beta){
+                best_moves->prunned_loc = i + 1;
+                break;
+            }
+        }
+    }
+    // once all the moves have been searched set the eval of this board to the best move found and return the best eval
+    if (player == 1){
+        board_eval = max_eval;
+    }
+    else {
+        board_eval = min_eval;
+    }
+    // update the eval of this board
+    best_moves->eval = board_eval;
+    
+    return board_eval;
 }
 
 
@@ -412,8 +625,36 @@ struct board_data* start_board_search(intLong p1, intLong p2, intLong p1k, intLo
     int* piece_offsets = malloc(sizeof(int) * 64 * 4);
     compute_offsets(piece_offsets);
     struct set* piece_loc = get_piece_locations(p1, p2, p1k, p2k);
+    // the tree will be stored in a linked list of best_move structs (populated during search)
+    struct board_data* best_moves = board_data_constructor(player, -1, -1);
+    struct board_evaler* evaler = board_evaler_constructor(); 
+    float eval_;
+    
+    // test code 
+    clock_t start, end;
+    double cpu_time_used;
+    int depth = 16;
+    start = clock();
+    // call the search function
+    for (int i = 2; i < depth; i++){
+        eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0, best_moves, evaler);
+        
+        // get the end time
+        end = clock();
+        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+        // print the results
+        printf("boards searched: %d\n", evaler->boards_evaluated);
+        printf("%d ply search time: %f\n", i, cpu_time_used);
+        printf("best_eval: %f\n\n", best_moves->eval);
+    }
 
 
+    // free the memory
+    free(piece_offsets);
+    free(piece_loc);
+    free(evaler);
+    // free the tree of moves 
+    return best_moves;
 }
 
 // search to the depth specified and count to total amount of boards for a certain depth
@@ -423,28 +664,37 @@ long long n_ply_search(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int
     int moves[96];
     long long total_boards = 0;
     int player_next;
-    int num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, offsets);
-    // if there are no moves or the depth is 0 return 1
+    int pos_init;
+    int pos_final;
+
+     // if there are no moves or the depth is 0 return 1
     if (depth == 0){
         total_boards += 1;
         return total_boards;
     }
 
+    // generate the moves for the current board
+    int num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, offsets, False);
+
     // otherwise loop over all the moves and call the function recursivly
     for (int i = 0; i < num_moves; i++){
+        // get the moves being made this iteration of the search
+        pos_init = moves[i * 2];
+        pos_final = moves[(i * 2) + 1];
+
         // update the board and set values
-        int jumped_piece_type = update_board(p1, p2, p1k, p2k, moves[i * 2], moves[(i * 2) + 1]);
-        update_piece_locations(moves[i * 2], moves[(i * 2) + 1], piece_loc);
+        int jumped_piece_type = update_board(p1, p2, p1k, p2k, pos_init, pos_final);
+        update_piece_locations(pos_init, pos_final, piece_loc);
 
         // get the player that is going to move after this move
-        player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, moves[i * 2], moves[(i * 2) + 1], player, offsets);
+        player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, pos_init, pos_final, player, offsets);
 
         // call the function recursivly
         total_boards += n_ply_search(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth - 1);
 
         // undo the update to the board and piece locations
-        undo_piece_locations_update(moves[i * 2], moves[(i * 2) + 1], piece_loc);
-        undo_board_update(p1, p2, p1k, p2k, moves[i * 2], moves[(i * 2) + 1], jumped_piece_type);
+        undo_piece_locations_update(pos_init, pos_final, piece_loc);
+        undo_board_update(p1, p2, p1k, p2k, pos_init, pos_final, jumped_piece_type);
     }
     
     return total_boards;
@@ -480,20 +730,51 @@ void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k){
 // also benchmarks the time it takes to generate the moves
 int main(){
     // setup initial board and search structures
+    // starting bit values
     intLong p1 = 6172839697753047040;
     intLong p2 = 11163050;
     intLong p1k = 0;
     intLong p2k = 0;
+
+    // end game player 2 winning endgame
+    //intLong p1 = 5838922414443986944;
+    //intLong p2 = 8409224;
+    //intLong p1k = 0;
+    //intLong p2k = 288230376154333184;
+
+
     int player = 1;
+    struct board_data* best_moves;
+
     struct set* piece_loc = get_piece_locations(p1, p2, p1k, p2k);
+
     int* offsets = malloc(sizeof(int) * 64 * 4);
     compute_offsets(offsets);
 
-    int depth = 10;
+    int depth = 9;
+
+    // run the search
+    best_moves = start_board_search(p1, p2, p1k, p2k, player);
+
+    // exit for now as this is just a test
+    exit(1);
+
+    clock_t start, end;
+    double cpu_time_used;
 
     for (int i = 1; i < depth; i++){
+        // get the start time
+        start = clock();
+
         long long n_ply_search_result = n_ply_search(&p1, &p2, &p1k, &p2k, player, piece_loc, offsets, i);
+
+        // get the end time
+        end = clock();
+        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+
+        // print the results
         printf("%d ply search result: %lld\n", i, n_ply_search_result);
+        printf("%d ply search time: %f\n\n", i, cpu_time_used);
 
     }
 
