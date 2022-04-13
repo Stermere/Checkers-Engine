@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include "Cset.h"
+#include "Chash_table.h"
 
 // define some functions
 float* compute_piece_pos();
@@ -12,12 +13,13 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
 float evaluate_pos(int type, int pos, struct board_evaler* evaler);
 
 
-// struct to hold the data for the hash table
+// struct to hold the data for the hash table and other data related to getting a evaluation for a board
 struct board_evaler{
     float *piece_pos_map;
     float *king_pos_map;
     long long int boards_evaluated;
-    long long int boards_hashed;
+    int search_depth;
+    struct hash_table* hash_table;
 };
 
 struct board_evaler* board_evaler_constructor(void){
@@ -25,13 +27,25 @@ struct board_evaler* board_evaler_constructor(void){
     evaler->piece_pos_map = compute_piece_pos();
     evaler->king_pos_map = compute_king_pos();
 
+    // prepare a table of size 8,388,608 
+    long long int hash_table_size = 1 << 23;
+    evaler->hash_table = init_hash_table(hash_table_size);
+
     return evaler;
 }
 
 // get the board evaluation from the hash table or if not there, calculate it and put it in the hash table
 // hash table is not yet implimented
-float get_eval(long long p1, long long p2, long long p1k, long long p2k, struct set* piece_loc, struct board_evaler* evaler){
-    float eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
+float get_eval(long long p1, long long p2, long long p1k, long long p2k, struct set* piece_loc, struct board_evaler* evaler, int depth, long long int hash){
+    //return calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
+
+    // see if the hash is in the table
+    float eval = get_hash_entry(evaler->hash_table, hash);
+    if (isnan(eval)){
+        // if it is not calculate it and store it in the table
+        eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
+        add_hash_entry(evaler->hash_table, hash, eval, (evaler->search_depth - depth), 0);
+    }
 
     return eval;
 }
@@ -65,11 +79,6 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
         }
     }
     return eval;
-}
-
-// calculate the value of the board
-float calcutate_hash(long long p1, long long p2, long long p1k, long long p2k){
-
 }
 
 // evaluate the position of a piece (type comes in two flavors 0 for normal piece and 1 for a king)

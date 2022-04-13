@@ -159,7 +159,7 @@ void set_add(struct set *s, int x){
 // takes the sentinel node as an argument
 // this function is not meant to be called directly, it is called by the set_add and set_remove functions
 void rebalance_tree(){
-
+    
 }
 
 // create a set
