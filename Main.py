@@ -3,17 +3,16 @@
 # developed by Collin Kees
 
 from copy import deepcopy
-from time import process_time, sleep
-from Minmax_bitboard import Minmax
+from time import process_time
+from bitboard_converter import convert_bit_move, convert_to_bitboard
 from Monty_carlo import Monty_carlo
 from Board_opperations import Board, check_jump_required, update_board, check_win, generate_all_options
+import search_engine
 
 if __name__ == '__main__':
     import pygame
     import multiprocessing as mp
     from Gui import Gui
-    from Minmax_bitboard import convert_bit_move
-
 
 # allows processing of wins until time runs out
 def dynamic_win(board : list, last_move : tuple, state : int, return_dict, p_time : float):
@@ -35,54 +34,55 @@ def dynamic_win(board : list, last_move : tuple, state : int, return_dict, p_tim
     return_dict["montycarlo"] = return_data
 
 # allows for processing to be stopped at a precice time without losing speed 
-def dynamic_depth(board : list, state : int, p_time, return_dict): 
-    minmax = Minmax(board)
-    minmax.iterative_depth(p_time, state, output=return_dict)
+def dynamic_depth(board : list, player : int, p_time : int, return_dict): 
+    p1, p2, p1k, p2k = convert_to_bitboard(board)
+    # a depth of 25 is almost impossible to reach so we will limit it to that if it does reach it
+    p_depth = 25;
+    results = search_engine.search_position(p1, p2, p1k, p2k, player, p_time, p_depth)
+
+    #print(results)
 
     # update the return dict (stops montycarlo if a search is terminated before the time constraint)
-    return_dict["minmax"] = minmax 
+    return_dict["depth"] = results[-1][0]
+    return_dict["leafs"] = results[-1][1]
+    return_dict["eval"] = results[-1][3]
+    return_dict["hashes"] = results[-1][2]
+
+    # save the object in a touple interpretation to sent it back to the main thread
+    return_dict["minmax"] = results
     return_dict["done"] = True
 
 
 # merge the weights from both three searches to resolve any ties in the minimax search
 def merge_monty_and_minmax(montycarlo, minmax, player):
-    move_options = [] + [[minmax.move_list[2][0][0], minmax.move_list[2][0][1]]]
-    highest_eval = minmax.move_list[2][0][0]
-    for item in minmax.move_list[2]:
-        if item[0] == None:
-            continue
-        if player == 1:
-            if item[0] > highest_eval:
-                move_options = [[item[0], item[1]]]
-                highest_eval = item[0]
-            elif item[0] == highest_eval:
-                move_options.append([item[0], item[1]])
-        if player == 2:
-            if item[0] < highest_eval:
-                move_options = [[item[0], item[1]]]
-                highest_eval = item[0]
-            elif item[0] == highest_eval:
-                move_options.append([item[0], item[1]])
+    # if the player is 2 then the weights are reversed
+    options = []
+    best_move = minmax[0][0]
+    # get the best moves from the minmax search
+    for i in range(len(minmax)):
+        if minmax[i][0] >= best_move:
+            best_move = minmax[i][0]
+            options.append((minmax[i][0], minmax[i][1], minmax[i][1]))
 
-    best_move = move_options[0][1]
-    best_ratio = 0
-    for child in montycarlo:
-        for move in move_options:
-            # monty carlo list is in the format [move, p1_wins, p2_wins]
-            if child[0] == convert_bit_move(move[1]):
+    # merge the weights from both searches
+    for i in range(len(options)):
+        for j in range(len(montycarlo)):
+            if montycarlo[j][1] == convert_bit_move((options[i][1], options[i][2]))[0] and montycarlo[j][0][0] == convert_bit_move((options[i][1], options[i][2]))[0]:
+
+                # merge logic 
                 if player == 2:
-                    ratio = (child[2] + 1) / (child[1] + 1)
+                    ratio = (montycarlo[j][2] + 1) / (montycarlo[j][1] + 1)
                     if ratio > best_ratio:
                         best_ratio = ratio
-                        best_move = move[1]
+                        best_move = (options[i][1], montycarlo[i][2])
                 else:
-                    ratio = (child[1] + 1) / (child[2] + 1)
+                    ratio = (montycarlo[j][1] + 1) / (montycarlo[j][2] + 1)
                     if ratio > best_ratio:
                         best_ratio = ratio
-                        best_move = move[1]
+                        best_move = (options[i][1], montycarlo[i][2])
 
     # update the best move attribute
-    minmax.best_move = best_move
+    minmax[-2] = best_move
 
 
 # start the processing of the minimax and Monty Carlo tree search
@@ -93,8 +93,8 @@ def start_processing(board : list, state : int, p_time, gui: object):
     # initialize some values that will be needed
     return_dict["minmax"] = None
     return_dict["best_move"] = None
-    return_dict["eval"] = 0
     return_dict["depth"] = 0
+    return_dict["eval"] = 0
     return_dict["leafs"] = 0
     return_dict["hashes"] = 0
     return_dict["wins1"] = 0
@@ -172,8 +172,8 @@ def main() -> None:
 
 
     # True to have the game play against itself
-    BOT_PLAYING = False
-    P_TIME = 3
+    BOT_PLAYING = True
+    P_TIME = .5
 
     while True:
         # check for quit 
@@ -183,9 +183,6 @@ def main() -> None:
 
         # update any variables for data gathering : TODO add more
         turns += 1
-        
-        # update the screen
-        gui.draw()
 
         # allow the player that's turn it is to make its move
         if player == 1:
@@ -193,14 +190,17 @@ def main() -> None:
             # Note: only have one ennabled or bad stuff happens
             # for bot on bot
             if BOT_PLAYING:
+                # the bot
                 player3, monty_carlo = start_processing(board.board, 1, P_TIME, gui)
-                            # update the board with the bots chosen move
-                chosen_move = convert_bit_move(player3.best_move)
+
+                # update the board with the bots chosen move
+                chosen_move = convert_bit_move(player3[-2])
                 turn = update_board(chosen_move[0], chosen_move[1], board.board)
                 if turn == True and check_jump_required(board.board, player, chosen_move[1]):
                     turn = True
                 else:
                     turn = False
+
                 gui.limited_options = [chosen_move[0], chosen_move[1]]
             # for human player
             else:
@@ -214,7 +214,7 @@ def main() -> None:
             player2, monty_carlo = start_processing(board.board, 2, P_TIME, gui)
 
             # update the board with the bots chosen move
-            chosen_move = convert_bit_move(player2.best_move)
+            chosen_move = convert_bit_move(player2[-2])
             turn = update_board(chosen_move[0], chosen_move[1], board.board)
             if turn == True and check_jump_required(board.board, player, chosen_move[1]):
                 turn = True
@@ -222,14 +222,13 @@ def main() -> None:
                 turn = False
 
             gui.red_blocks += chosen_move[0], chosen_move[1]
-            print(f'time allowed for processing {P_TIME} seconds')
-            print(f'Total branches Prunned: {0}')
-            # print the total boards evaled including the last incompleted search
-            print(f'Hashes Generated: {player2.evaluator.num_hashes}')
-            print(f'Boards Evaluated: {player2.nodes_traversed}')
+            # print some stats
+            print('-'*50 + '\n')
+            print(f'Hashes Generated: {player2[-1][2]}')
+            print(f'Boards Evaluated: {player2[-1][1]}')
             print(f'ends found with montycarlo search: {monty_carlo[0] + monty_carlo[1]}')
-            print(f'predicted board state: {round(player2.eval, 4)}')
-            print(f'depth reached: {player2.highest_depth}\n')
+            print(f'predicted board state: {round(player2[-1][3], 4)}')
+            print(f'depth reached: {player2[-1][0]}\n')
             print('-'*50 + '\n')
 
             if turn:
