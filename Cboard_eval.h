@@ -26,6 +26,7 @@ struct board_evaler* board_evaler_constructor(void){
     struct board_evaler* evaler = (struct board_evaler*)malloc(sizeof(struct board_evaler));
     evaler->piece_pos_map = compute_piece_pos();
     evaler->king_pos_map = compute_king_pos();
+    evaler->boards_evaluated = 0ll;
 
     // prepare a table of size 8,388,608 
     long long int hash_table_size = 1 << 23;
