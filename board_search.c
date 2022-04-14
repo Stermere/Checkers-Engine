@@ -426,25 +426,25 @@ void undo_board_update(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int
     if (piece_type == 1){
         *p1 = *p1 ^ (1ll << piece_loc_initial);
         *p1 = *p1 ^ (1ll << piece_loc_after);
+    } else if (piece_type == 2){
+        *p2 = *p2 ^ (1ll << piece_loc_initial);
+        *p2 = *p2 ^ (1ll << piece_loc_after);
+    } else if (piece_type == 3){
+        *p1k = *p1k ^ (1ll << piece_loc_initial);
+        *p1k = *p1k ^ (1ll << piece_loc_after);
         // check if the piece should be unkinged
         if (initial_piece_type == 1){
             *p1k = *p1k ^ (1ll << piece_loc_initial);
             *p1 = *p1 ^ (1ll << piece_loc_initial);
         }
-    } else if (piece_type == 2){
-        *p2 = *p2 ^ (1ll << piece_loc_initial);
-        *p2 = *p2 ^ (1ll << piece_loc_after);
+    } else if (piece_type == 4){
+        *p2k = *p2k ^ (1ll << piece_loc_initial);
+        *p2k = *p2k ^ (1ll << piece_loc_after);
         // check if the piece should be unkinged
         if (initial_piece_type == 2){
             *p2k = *p2k ^ (1ll << piece_loc_initial);
             *p2 = *p2 ^ (1ll << piece_loc_initial);
         }
-    } else if (piece_type == 3){
-        *p1k = *p1k ^ (1ll << piece_loc_initial);
-        *p1k = *p1k ^ (1ll << piece_loc_after);
-    } else if (piece_type == 4){
-        *p2k = *p2k ^ (1ll << piece_loc_initial);
-        *p2k = *p2k ^ (1ll << piece_loc_after);
     }
     if (jumped_piece_type != -1){
         if (jumped_piece_type == 1){

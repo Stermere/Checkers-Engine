@@ -38,7 +38,7 @@ struct board_evaler* board_evaler_constructor(void){
 // get the board evaluation from the hash table or if not there, calculate it and put it in the hash table
 // hash table is not yet implimented
 float get_eval(long long p1, long long p2, long long p1k, long long p2k, struct set* piece_loc, struct board_evaler* evaler, int depth, long long int hash){
-    //return calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
+    return calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
 
     // see if the hash is in the table
     float eval = get_hash_entry(evaler->hash_table, hash);
