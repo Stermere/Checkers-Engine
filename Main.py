@@ -93,6 +93,7 @@ def start_processing(board : list, state : int, p_time, gui: object):
     # initialize some values that will be needed
     return_dict["minmax"] = None
     return_dict["best_move"] = None
+    return_dict["montycarlo"] = []
     return_dict["depth"] = 0
     return_dict["eval"] = 0
     return_dict["leafs"] = 0
@@ -113,7 +114,6 @@ def start_processing(board : list, state : int, p_time, gui: object):
     # prepare the processes
     minmax = mp.Process(target=dynamic_depth, args=(board, state, p_time, return_dict, ))
     montycarlo_list = []
-    return_dict["montycarlo"] = []
 
     for child in next_layer_boards:
         board_ = deepcopy(board)
@@ -138,8 +138,7 @@ def start_processing(board : list, state : int, p_time, gui: object):
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
-        gui.update_params(return_dict)
-
+            gui.draw()
     # once minimax search ends montycarlo should end as well
     minmax.join()
     for child in montycarlo_list:
@@ -163,17 +162,18 @@ def main() -> None:
     board = Board()
     gui = Gui(board.board, size, clock, screen, 1) # must be initialized regardless of if a human is playing or not
 
-    # variables to keep track of some data that will be needed to train the neral net (also nice to display some stats while playing if you want)
+    # variables to keep track of some data that is integral to the game (allows for moves to not be repeated more than twice)
     p1_wins = 0
     p2_wins = 0
     turns = 0
+    moves_at_turn = []
     board_at_turn = []
     pieces_at_turn = []
 
 
     # True to have the game play against itself
-    BOT_PLAYING = True
-    P_TIME = .5
+    BOT_PLAYING = False
+    P_TIME = 2
 
     while True:
         # check for quit 
@@ -254,7 +254,7 @@ def main() -> None:
                         quit()
                 gui.draw()
             print('player one wins')
-            board.reset_board(gui, player2)
+            board.reset_board(gui)
             gui = Gui(board.board, size, clock, screen, 1)
             player = 1
             p1_wins += 1
@@ -271,7 +271,7 @@ def main() -> None:
                         quit()
                 gui.draw()
             print('player two wins')
-            board.reset_board(gui, player2)
+            board.reset_board(gui)
             gui = Gui(board.board, size, clock, screen, 1)
             player = 1
             p2_wins += 1

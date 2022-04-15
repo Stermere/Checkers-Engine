@@ -30,10 +30,9 @@ class Board: # class to store the board data and update it accordingly
         #              [0, 0, 0, 0, 0, 0, 0, 0],
         #              [1, 0, 0, 0, 1, 0, 1, 0]]
                     
-    def reset_board(self, p1 : object, p2 : object) -> None:
+    def reset_board(self, p1 : object) -> None:
         self.__init__()
         p1.board = self.board
-        p2.board = self.board
 
 
 # functions to interact with simulated boards and the current board

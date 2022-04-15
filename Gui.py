@@ -182,5 +182,6 @@ class Gui(): # class to deal with the visual elements for the human player
         self.hashes = data["hashes"]
         self.montycarlop1 = data["wins1"]
         self.montycarlop2 = data["wins2"]
-        self.eval = data["eval"]
+        if data["leafs"] >  100:
+            self.eval = data["eval"]
         self.draw()
