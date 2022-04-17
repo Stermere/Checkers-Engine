@@ -781,10 +781,11 @@ struct board_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLo
 
     // print some final info about the search
     printf("initial hash: %lld\n", hash);
+    printf("hashes stored: %lld\n\n", evaler->hash_table->num_entries);
     printf("search time: %f\n", cpu_time_used);
+    printf("search depth: %d\n", depth);
     printf("best_eval: %f\n", best_moves->eval);
     printf("boards searched: %lld\n", evaler->boards_evaluated);
-    printf("hashes stored: %lld\n\n", evaler->hash_table->num_entries);
 
     // free the memory that is no longer needed
     free(piece_offsets);
