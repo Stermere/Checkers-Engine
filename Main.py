@@ -223,15 +223,8 @@ def main() -> None:
             else:
                 turn = False
 
+            # highlight the move that the bot chose
             gui.red_blocks += chosen_move[0], chosen_move[1]
-            # print some stats
-            print('-'*50 + '\n')
-            print(f'Hashes Generated: {player2[-1][2]}')
-            print(f'Boards Evaluated: {player2[-1][1]}')
-            print(f'ends found with montycarlo search: {monty_carlo[0] + monty_carlo[1]}')
-            print(f'predicted board state: {round(player2[-1][3], 4)}')
-            print(f'depth reached: {player2[-1][0]}\n')
-            print('-'*50 + '\n')
 
             if turn:
                 continue

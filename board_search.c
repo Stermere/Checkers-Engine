@@ -749,11 +749,11 @@ struct board_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLo
     struct board_evaler* evaler = board_evaler_constructor(); 
     // get the starting hash
     intLong hash = get_hash(p1, p2, p1k, p2k, evaler->hash_table);
-    printf("hash initial: %lld\n", hash);
     float eval_;
 
     clock_t start, end;
     double cpu_time_used;
+    int depth;
     int terminate = 0;
     start = clock();
     // call the search function
@@ -764,7 +764,7 @@ struct board_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLo
         // update the evalers search depth
         evaler->search_depth = i;
         eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0, best_moves, evaler, hash);
-        
+        depth = i;
         // get the end time
         end = clock();
         cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -777,12 +777,12 @@ struct board_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLo
         else if (best_moves->num_moves == 1){
             terminate = 1;
         }   
-        // print the results
-        printf("%d ply search time: %lf\n", i, cpu_time_used);
-        printf("best_eval: %f\n\n", best_moves->eval);
     }
 
     // print some final info about the search
+    printf("initial hash: %lld\n", hash);
+    printf("search time: %f\n", cpu_time_used);
+    printf("best_eval: %f\n", best_moves->eval);
     printf("boards searched: %lld\n", evaler->boards_evaluated);
     printf("hashes stored: %lld\n\n", evaler->hash_table->num_entries);
 
