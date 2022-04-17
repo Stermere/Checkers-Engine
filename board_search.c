@@ -47,6 +47,7 @@ void merge(struct board_data* ptr, int half, int num_elements);
 void merge_sort(struct board_data* ptr, int num_elements);
 unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, unsigned long long int hash, struct board_evaler* evaler);
 struct board_data* get_best_move(struct board_data *head, int player);
+void end_board_search(struct board_info* best_moves, struct board_evaler* evaler);
 
 // for some reason this has to be above the python stuff even if it is defined, otherwise it doesn't work
 
@@ -118,6 +119,9 @@ static PyObject* search_position(PyObject *self, PyObject *args){
     // get some stats about the search
     py_tuple = Py_BuildValue("KKKf", board_info->evaler->search_depth, board_info->evaler->boards_evaluated, board_info->evaler->hash_table->num_entries, best_move->eval);
     PyList_Append(py_list, py_tuple);
+
+    // free the search tree the evaler and the transposition table
+    end_board_search(board_info->head, board_info->evaler);
 
 
     // return the python tuple
@@ -780,18 +784,20 @@ struct board_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLo
     }
 
     // print some final info about the search
-    printf("initial hash: %lld\n", hash);
-    printf("hashes stored: %lld\n\n", evaler->hash_table->num_entries);
+    // print 50 dashes
+    for (int i = 0; i < 50; i++){
+        printf("-");
+    }
+    printf("\n\ninitial hash: %lld\n", hash);
+    printf("hashes stored: %lld\n", evaler->hash_table->num_entries);
     printf("search time: %f\n", cpu_time_used);
     printf("search depth: %d\n", depth);
     printf("best_eval: %f\n", best_moves->eval);
-    printf("boards searched: %lld\n", evaler->boards_evaluated);
+    printf("boards searched: %lld\n\n", evaler->boards_evaluated);
 
     // free the memory that is no longer needed
     free(piece_offsets);
     free(piece_loc);
-    free(evaler->hash_table->table);
-    free(evaler->hash_table);
 
     return_struct->head = best_moves;
     return_struct->evaler = evaler;
@@ -800,19 +806,25 @@ struct board_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLo
     return return_struct;
 }
 
-// free the board tree from memory
-int free_board_data(struct board_data* data){
-    return 0;
-}
-
-
 // clean up after the search has been concluded and the thread is about to exit
 void end_board_search(struct board_info* best_moves, struct board_evaler* evaler){
     // free the memory used by the evaler
+    free(evaler->hash_table->table);
     free(evaler->hash_table);
     free(evaler);
-    // free the memory used by the best moves
+    // free the memory used by the search tree
     free_board_data(best_moves);
+}
+
+// free the board tree from memory
+int free_board_data(struct board_data* data){
+    if (data->num_moves == 0){
+        free(data);
+        return 1;
+    }
+    for (int i = 0; i < data->num_moves; i++){
+        free_board_data(data->next_boards + i);
+    }
 }
 
 // search to the depth specified and count to total amount of boards for a certain depth
