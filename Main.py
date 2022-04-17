@@ -133,12 +133,14 @@ def start_processing(board : list, state : int, p_time, gui: object):
 
     # update the values on the board as they are processed and continue to draw the board
     while return_dict["done"] == False:
+        clock = pygame.time.Clock()
         # make another pygame loop for while the bot is thinking
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
             gui.draw()
+            clock.tick(60)
     # once minimax search ends montycarlo should end as well
     minmax.join()
     for child in montycarlo_list:
@@ -253,6 +255,7 @@ def main() -> None:
                         pygame.quit()
                         quit()
                 gui.draw()
+                clock.tick(60)
             print('player one wins')
             board.reset_board(gui)
             gui = Gui(board.board, size, clock, screen, 1)
@@ -270,6 +273,7 @@ def main() -> None:
                         pygame.quit()
                         quit()
                 gui.draw()
+                clock.tick(60)
             print('player two wins')
             board.reset_board(gui)
             gui = Gui(board.board, size, clock, screen, 1)
