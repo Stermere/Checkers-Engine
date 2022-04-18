@@ -814,17 +814,20 @@ void end_board_search(struct board_info* best_moves, struct board_evaler* evaler
     free(evaler);
     // free the memory used by the search tree
     free_board_data(best_moves);
+    free(best_moves);
 }
 
 // free the board tree from memory
+// TODO fix this function
 int free_board_data(struct board_data* data){
-    if (data->num_moves == 0){
-        free(data);
-        return 1;
+    if (data->num_moves <= -1){
+        return 0;
     }
+    int boards_freed = 0;
     for (int i = 0; i < data->num_moves; i++){
-        free_board_data(data->next_boards + i);
+        boards_freed += free_board_data(&data->next_boards[i]);
     }
+    return boards_freed + data->prunned_loc;
 }
 
 // search to the depth specified and count to total amount of boards for a certain depth
