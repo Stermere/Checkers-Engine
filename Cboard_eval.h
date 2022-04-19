@@ -96,14 +96,14 @@ float evaluate_pos(int type, int pos, struct board_evaler* evaler){
 float* compute_piece_pos(){
     float *eval_table = (float*)malloc(sizeof(float) * 64);
     float init_table[8][8] = {
-        {0, 0, 0, 0, 0, 0, 0, 0},
+        {1, 1, 1, 1, 1, 1, 1, 1},
         {0, 0, 0, 0, 0, 0, 0, 0},
         {0, 1, 1, 1, 1, 1, 1, 0},
-        {0, 1, 1, 2, 2, 1, 1, 0},
-        {0, 1, 1, 2, 2, 1, 1, 0},
+        {0, 1, 1, 1, 1, 1, 1, 0},
+        {0, 1, 1, 1, 1, 1, 1, 0},
         {0, 1, 1, 1, 1, 1, 1, 0},
         {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0}
+        {1, 1, 1, 1, 1, 1, 1, 1}
     };
     for (int i = 0; i < 64; i++){
         eval_table[i] = init_table[i / 8][i % 8]/ 10.0;

@@ -141,6 +141,7 @@ def start_processing(board : list, state : int, p_time, gui: object):
                 quit()
             gui.draw()
             clock.tick(60)
+        gui.draw()
     # once minimax search ends montycarlo should end as well
     minmax.join()
     for child in montycarlo_list:
@@ -174,7 +175,7 @@ def main() -> None:
 
 
     # True to have the game play against itself
-    BOT_PLAYING = False
+    BOT_PLAYING = False;
     P_TIME = 2
 
     while True:
