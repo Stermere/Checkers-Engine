@@ -3,6 +3,8 @@
 # developed by Collin Kees
 
 from copy import deepcopy
+from statistics import mode
+import sys
 from time import process_time
 from bitboard_converter import convert_bit_move, convert_to_bitboard
 from Monty_carlo import Monty_carlo
@@ -152,10 +154,10 @@ def start_processing(board : list, state : int, p_time, gui: object):
     merge_monty_and_minmax(return_dict["montycarlo"], return_dict["minmax"], state)
 
     # update hashes, leaves, and prunned branches
-    return return_dict["minmax"], (return_dict["wins1"], return_dict["wins2"])
+    return return_dict["minmax"]
 
 
-def main() -> None:
+def main(args) -> None:
     size = (1000, 800)
     clock = pygame.time.Clock()
     screen = pygame.display.set_mode(size)
@@ -173,11 +175,23 @@ def main() -> None:
     board_at_turn = []
     pieces_at_turn = []
 
+    # set variables based on args
+    if len(args) == 1:
+        args = ["","0", "human"]
 
-    # True to have the game play against itself
-    BOT_PLAYING = False;
-    P_TIME = 2
+    search_time = args[1]
+    mode = args[2]
 
+    if mode == "bot":
+        BOT_PLAYING = True
+    else:
+        BOT_PLAYING = False
+
+    if search_time != "0":
+        P_TIME = float(search_time)
+    else:
+        P_TIME = 1
+    # main loop
     while True:
         # check for quit 
         for event in pygame.event.get():
@@ -194,7 +208,7 @@ def main() -> None:
             # for bot on bot
             if BOT_PLAYING:
                 # the bot
-                player3, monty_carlo = start_processing(board.board, 1, P_TIME, gui)
+                player3 = start_processing(board.board, 1, P_TIME, gui)
 
                 # update the board with the bots chosen move
                 chosen_move = convert_bit_move(player3[-2])
@@ -214,7 +228,7 @@ def main() -> None:
 
         else:
             # the bot
-            player2, monty_carlo = start_processing(board.board, 2, P_TIME, gui)
+            player2 = start_processing(board.board, 2, P_TIME, gui)
 
             # update the board with the bots chosen move
             chosen_move = convert_bit_move(player2[-2])
@@ -276,4 +290,4 @@ def main() -> None:
             turns = 0
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv)
