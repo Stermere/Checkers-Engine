@@ -98,10 +98,10 @@ float* compute_piece_pos(){
     float table[8][8] = { 
         {2, 2, 2, 2, 2, 2, 2, 2},
         {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 1, 1, 1, 1, 1, 1, 0},
-        {0, 1, 1, 1, 1, 1, 1, 0},
-        {0, 1, 1, 1, 1, 1, 1, 0},
-        {0, 1, 1, 1, 1, 1, 1, 0},
+        {0, 0, 0, 0 ,0 ,0 ,0, 0},
+        {0, 0, 0, 0 ,0 ,0 ,0, 0},
+        {0, 0, 0, 0 ,0 ,0 ,0, 0},
+        {0, 0, 0, 0 ,0 ,0 ,0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0},
         {2, 2, 2, 2, 2, 2, 2, 2}
     };
@@ -115,17 +115,18 @@ float* compute_piece_pos(){
 }
 
 // compute the array of king positions containing how good it is to have a king at each position
+// TODO make the eval relative to the proximity of the king to the other players king (should help solve endgames)
 float* compute_king_pos(){
     float *eval_table = (float*)malloc(sizeof(float) * 64);
         float init_table[8][8] = {
-         {1, 1, 0, 0, 0, 0, 0, 0},
-         {1, 2, 2, 2, 2, 2, 1, 0},
-         {0, 1, 3, 3, 3, 3, 1, 0},
-         {0, 1, 3, 3, 3, 3, 1, 0},
-         {0, 1, 3, 3, 3, 3, 1, 0},
-         {0, 1, 3, 3, 3, 3, 1, 0},
-         {0, 1, 2, 2, 2, 2, 2, 1},
-         {0, 0, 0, 0, 0, 0, 1, 1}
+         {0, 0, 0, 0, 0, 0, 0, 0},
+         {0, 0, 0, 0, 0, 0, 0, 0},
+         {0, 0, 3, 3, 3, 3, 0, 0},
+         {0, 0, 3, 3, 3, 3, 0, 0},
+         {0, 0, 3, 3, 3, 3, 0, 0},
+         {0, 0, 3, 3, 3, 3, 0, 0},
+         {0, 0, 0, 0, 0, 0, 0, 0},
+         {0, 0, 0, 0, 0, 0, 0, 0}
         };
     for (int i = 0; i < 64; i++){
         eval_table[i] = init_table[i / 8][i % 8] / 10.0;
