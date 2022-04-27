@@ -45,6 +45,7 @@ class Gui(): # class to deal with the visual elements for the human player
 
     # the main loop that runs when the human player is choosing its next move (yes it is a horribly complicated function)
     def choose_action(self) -> list:
+        clock = pygame.time.Clock()
         self.limited_options = check_jump_required(self.board, self.type)
         running = True
         while running:
@@ -96,6 +97,7 @@ class Gui(): # class to deal with the visual elements for the human player
                                         self.selected_block = [x, y]
                                         self.highlighted_blocks = generate_options((x,y), self.board, only_jump=True)
             self.draw()
+            clock.tick(60)
         return False, None
 
     # draws the board
@@ -182,6 +184,5 @@ class Gui(): # class to deal with the visual elements for the human player
         self.hashes = data["hashes"]
         self.montycarlop1 = data["wins1"]
         self.montycarlop2 = data["wins2"]
-        if not data["eval"] == 0:
+        if data["leafs"] >  100:
             self.eval = data["eval"]
-        self.draw()
