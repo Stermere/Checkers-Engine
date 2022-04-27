@@ -2,19 +2,17 @@
 # uses minimax and monty carlo tree searches to find a optimial move
 # developed by Collin Kees
 
+
 from copy import deepcopy
-from statistics import mode
 import sys
 from time import process_time
 from bitboard_converter import convert_bit_move, convert_to_bitboard
 from Monty_carlo import Monty_carlo
 from Board_opperations import Board, check_jump_required, update_board, check_win, generate_all_options
 import search_engine
+import multiprocessing as mp
 
-if __name__ == '__main__':
-    import pygame
-    import multiprocessing as mp
-    from Gui import Gui
+
 
 # allows processing of wins until time runs out
 def dynamic_win(board : list, last_move : tuple, state : int, return_dict, p_time : float):
@@ -288,6 +286,14 @@ def main(args) -> None:
             player = 1
             p2_wins += 1
             turns = 0
+
+# if this is another process go straight to what it needs to do
+mp.freeze_support()
+# TODO put the logic to start the threads in its own file so this is not gross and bad
+
+if __name__ == '__main__':
+    import pygame
+    from Gui import Gui
 
 if __name__ == '__main__':
     main(sys.argv)
