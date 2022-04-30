@@ -24,7 +24,7 @@ def dynamic_win(board_list : list, return_dict, p_time : float):
         monty_list.append(Monty_carlo(board_list[i][0], board_list[i][1]))
         return_list.append([board_list[i][2], 0, 0])
 
-    wins_per_search = 5
+    wins_per_search = 10
     while process_time() - time < p_time and return_dict["done"] != True:
         for i, monty in enumerate(monty_list):
             monty.find_n_wins(wins_per_search)
