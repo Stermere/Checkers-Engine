@@ -15,23 +15,29 @@ import multiprocessing as mp
 
 
 # allows processing of wins until time runs out
-def dynamic_win(board : list, last_move : tuple, state : int, return_dict, p_time : float):
+def dynamic_win(board_list : list, return_dict, p_time : float):
     # get the child that is the new board state
     time = process_time()
-    montycarlo = Monty_carlo(state, board)
-    
-    wins_per_search = 10
+    monty_list = []
+    return_list = []
+    for i in range(len(board_list)):
+        monty_list.append(Monty_carlo(board_list[i][0], board_list[i][1]))
+        return_list.append([board_list[i][2], 0, 0])
+
+    wins_per_search = 5
     while process_time() - time < p_time and return_dict["done"] != True:
-        prevp1 = montycarlo.total_p1_win
-        prevp2 = montycarlo.total_p2_win
-        montycarlo.find_n_wins(wins_per_search)
-        return_dict["wins1"] += montycarlo.total_p1_win - prevp1
-        return_dict["wins2"] += montycarlo.total_p2_win - prevp2
+        for i, monty in enumerate(monty_list):
+            monty.find_n_wins(wins_per_search)
+            return_list[i][1] = monty_list[i].total_p1_win
+            return_list[i][2] = monty_list[i].total_p2_win
 
     # save the object in a touple interpretation to sent it back to the main thread
-    return_data = return_dict["montycarlo"]
-    return_data.append((last_move, montycarlo.total_p1_win, montycarlo.total_p2_win))
-    return_dict["montycarlo"] = return_data
+    return_dict["montycarlo"] = return_list
+
+    # update the wins attribute for the gui
+    for i in range(len(return_list)):
+        return_dict["wins1"] += return_list[i][1]
+        return_dict["wins2"] += return_list[i][2]
 
 # allows for processing to be stopped at a precice time without losing speed 
 def dynamic_depth(board : list, player : int, p_time : int, return_dict): 
@@ -113,8 +119,8 @@ def start_processing(board : list, state : int, p_time, gui: object):
 
     # prepare the processes
     minmax = mp.Process(target=dynamic_depth, args=(board, state, p_time, return_dict, ))
+    
     montycarlo_list = []
-
     for child in next_layer_boards:
         board_ = deepcopy(board)
         update_board(child[0], child[1], board_)
@@ -123,13 +129,13 @@ def start_processing(board : list, state : int, p_time, gui: object):
             state_ = state
         else:
             state_ = invert_state(state) 
-        montycarlo_list.append(mp.Process(target=dynamic_win, args=(board_, child, state_, return_dict, p_time, )))
+        montycarlo_list.append([state_, board_, child])
+    monty = mp.Process(target=dynamic_win, args=(montycarlo_list, return_dict, p_time, ))
 
     # start the processes
     return_dict["done"] = False
     minmax.start()
-    for child in montycarlo_list:
-        child.start()
+    monty.start()
 
     # update the values on the board as they are processed and continue to draw the board
     while return_dict["done"] == False:
@@ -144,8 +150,7 @@ def start_processing(board : list, state : int, p_time, gui: object):
         gui.draw()
     # once minimax search ends montycarlo should end as well
     minmax.join()
-    for child in montycarlo_list:
-        child.join()
+    monty.join()
 
     gui.update_params(return_dict)
 
