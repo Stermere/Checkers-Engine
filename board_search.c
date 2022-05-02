@@ -1,5 +1,5 @@
 // Author: Collin Kees
-// language: c
+// language: C
 // Description: this program serves as the C library for move generation and evaluation of checkers boards
 
 #include <stdio.h>

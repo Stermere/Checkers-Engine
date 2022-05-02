@@ -1,6 +1,7 @@
 # A class to handle drawing and updating the GUI for the human player
 
 import pygame
+import sys
 from Board_opperations import check_jump_required, generate_options, update_board
 
 
@@ -54,7 +55,7 @@ class Gui(): # class to deal with the visual elements for the human player
                 if event.type == pygame.QUIT:
                     running = False
                     pygame.quit()
-                    quit()
+                    sys.exit()
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     mouse_button_click.append(event.button)
             # GUI loop starts here

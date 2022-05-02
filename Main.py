@@ -144,7 +144,7 @@ def start_processing(board : list, state : int, p_time, gui: object):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                quit()
+                sys.exit()
             gui.draw()
             clock.tick(60)
         gui.draw()
@@ -199,7 +199,7 @@ def main(args) -> None:
         # check for quit 
         for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    quit()
+                    sys.exit()
 
         # update any variables for data gathering : TODO add more
         turns += 1
@@ -264,7 +264,7 @@ def main(args) -> None:
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         pygame.quit()
-                        quit()
+                        sys.exit()
                 gui.draw()
                 clock.tick(60)
             print('player one wins')
@@ -282,7 +282,7 @@ def main(args) -> None:
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         pygame.quit()
-                        quit()
+                        sys.exit()
                 gui.draw()
                 clock.tick(60)
             print('player two wins')
