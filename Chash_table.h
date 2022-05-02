@@ -60,6 +60,11 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, float
     // check if the entry is empty
     if (check_for_entry(entry_index, hash) == 1){
         table->num_entries--;
+
+        // if the two hashes are equal print an error
+        if (entry_index->hash == hash){
+            printf("Error: hash collision\n");
+        }
         
         // if the entry is populated and the value stored is deamed more relevant return
         if (compare_hash_entries(entry_index, depth, age) == 1){
