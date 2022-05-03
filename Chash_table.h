@@ -60,11 +60,6 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, float
     // check if the entry is empty
     if (check_for_entry(entry_index, hash) == 1){
         table->num_entries--;
-
-        // if the two hashes are equal print an error
-        if (entry_index->hash == hash){
-            printf("Error: hash collision\n");
-        }
         
         // if the entry is populated and the value stored is deamed more relevant return
         if (compare_hash_entries(entry_index, depth, age) == 1){
@@ -91,9 +86,10 @@ int check_for_entry(struct hash_table_entry* entry_index, unsigned long long int
 
 // returns the eval of a hash table entry if it exists and is the right hash value
 // if the entry does not exits or is the wrong hash value, returns NAN
-float get_hash_entry(struct hash_table *table, unsigned long long int hash){
+// also return NAN if the age of the entry is older than the current age
+float get_hash_entry(struct hash_table *table, unsigned long long int hash, int age){
     struct hash_table_entry* entry_index = table->table + (hash % table->size);
-    if (entry_index->hash == hash){
+    if (entry_index->hash == hash && entry_index->age == age){
         return entry_index->eval;
     }
     else{
@@ -103,8 +99,18 @@ float get_hash_entry(struct hash_table *table, unsigned long long int hash){
 
 // compare two hash table entries and decide the one to keep
 // returns 1 if entry1 is better, 0 if the new values are better, if they are equal return 0
+// note: youger ages are actually larger numbers since age == search_depth the node was added to the table at
 int compare_hash_entries(struct hash_table_entry *entry1, int depth, int age){
-    if(entry1->depth > depth){
+    // we always want to keep entrys that are younger as they are more relevant
+    if(entry1->age >= age){
+        // less deep entrys store more work but are also less likly to be found again so
+        // decide which one to keep is not trivial, for now we will keep the one with the lower depth
+        if (entry1->depth < depth){
+            return 1;
+        }
+        else{
+            return 0;
+        }
         return 1;
     }
     else {

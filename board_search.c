@@ -620,6 +620,15 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     if (depth <= 0){
         captures_only = True;
     }
+
+    // check if this board has been searched to depth before and if so return the eval from the hash table
+    float potential_eval = get_hash_entry(evaler->hash_table, hash, evaler->search_depth);
+    if (!isnan(potential_eval)){
+        evaler->boards_evaluated++;
+        return potential_eval;
+    }
+
+
     // get the moves for this board and player combo or use the moves generated from the last depth search
     if (best_moves->num_moves == -1){
         int moves[96];
@@ -663,7 +672,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             else{
                 board_eval = 100.0 + depth;
             }
-            evaler->boards_evaluated += 1;
+            evaler->boards_evaluated++;
             best_moves->eval = board_eval;
             
             return board_eval;
@@ -672,7 +681,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         else{
             board_eval = get_eval(*p1, *p2, *p1k, *p2k, piece_loc, evaler, depth, hash);
             best_moves->eval = board_eval;
-            evaler->boards_evaluated += 1;
+            evaler->boards_evaluated++;
             return board_eval;
         }
     }
@@ -734,6 +743,9 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     }
     // update the eval of this board
     best_moves->eval = board_eval;
+
+    // store the eval in the hash table
+    add_hash_entry(evaler->hash_table, hash, board_eval, depth, evaler->search_depth);
     
     return board_eval;
 }

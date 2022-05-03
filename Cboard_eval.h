@@ -41,11 +41,11 @@ float get_eval(long long p1, long long p2, long long p1k, long long p2k, struct 
     //return calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
 
     // see if the hash is in the table
-    float eval = get_hash_entry(evaler->hash_table, hash);
+    float eval = get_hash_entry(evaler->hash_table, hash, evaler->search_depth);
     if (isnan(eval)){
         // if it is not calculate it and store it in the table
         eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
-        add_hash_entry(evaler->hash_table, hash, eval, (evaler->search_depth - depth), 0);
+        add_hash_entry(evaler->hash_table, hash, eval, (evaler->search_depth - depth), evaler->search_depth);
     }
 
     return eval;

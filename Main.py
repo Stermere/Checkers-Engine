@@ -42,8 +42,8 @@ def dynamic_win(board_list : list, return_dict, p_time : float):
 # allows for processing to be stopped at a precice time without losing speed 
 def dynamic_depth(board : list, player : int, p_time : int, return_dict): 
     p1, p2, p1k, p2k = convert_to_bitboard(board)
-    # a depth of 25 is almost impossible to reach so we will limit it to that if it does reach it
-    p_depth = 25;
+    # a depth of 50 is almost impossible to reach so we will limit it to that if it does reach it
+    p_depth = 50;
     results = search_engine.search_position(p1, p2, p1k, p2k, player, p_time, p_depth)
 
     #print(results)
