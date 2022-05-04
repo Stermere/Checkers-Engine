@@ -8,7 +8,7 @@ def main():
 
     player = 1
     search_time = 3
-    search_depth = -1
+    search_depth = 50
 
     return_data = search_engine.search_position(p1, p2, p1k, p2k, player, search_time, search_depth)
 
