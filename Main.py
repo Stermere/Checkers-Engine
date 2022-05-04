@@ -3,47 +3,20 @@
 # developed by Collin Kees
 
 
-from copy import deepcopy
 import sys
 from time import process_time
-from bitboard_converter import convert_bit_move, convert_to_bitboard
-from Monty_carlo import Monty_carlo
-from Board_opperations import Board, check_jump_required, update_board, check_win, generate_all_options
+from bitboard_converter import convert_bit_move, convert_matrix_move, convert_to_bitboard, convert_to_matrix
+from Board_opperations import Board, check_jump_required, update_board, check_win
 import search_engine
 import multiprocessing as mp
 
 
-
-# allows processing of wins until time runs out
-def dynamic_win(board_list : list, return_dict, p_time : float):
-    # get the child that is the new board state
-    time = process_time()
-    monty_list = []
-    return_list = []
-    for i in range(len(board_list)):
-        monty_list.append(Monty_carlo(board_list[i][0], board_list[i][1]))
-        return_list.append([board_list[i][2], 0, 0])
-
-    wins_per_search = 10
-    while process_time() - time < p_time and return_dict["done"] != True:
-        for i, monty in enumerate(monty_list):
-            monty.find_n_wins(wins_per_search)
-            return_list[i][1] = monty_list[i].total_p1_win
-            return_list[i][2] = monty_list[i].total_p2_win
-
-    # save the object in a touple interpretation to sent it back to the main thread
-    return_dict["montycarlo"] = return_list
-
-    # update the wins attribute for the gui
-    for i in range(len(return_list)):
-        return_dict["wins1"] += return_list[i][1]
-        return_dict["wins2"] += return_list[i][2]
-
-# allows for processing to be stopped at a precice time without losing speed 
-def dynamic_depth(board : list, player : int, p_time : int, return_dict): 
+# calls the board search algorithm and parses the results to the GUI 
+def start_search(board : list, player : int, p_time : int, return_dict): 
     p1, p2, p1k, p2k = convert_to_bitboard(board)
-    # a depth of 50 is almost impossible to reach so we will limit it to that if it does reach it
-    p_depth = 50;
+    # a depth of 25 is not likly to be hit by the search at the time of writing but if we do hit it
+    # we will need to increase the depth here
+    p_depth = 25;
     results = search_engine.search_position(p1, p2, p1k, p2k, player, p_time, p_depth)
 
     #print(results)
@@ -56,42 +29,9 @@ def dynamic_depth(board : list, player : int, p_time : int, return_dict):
 
     # save the object in a touple interpretation to sent it back to the main thread
     return_dict["minmax"] = results
-    return_dict["done"] = True
 
 
-# merge the weights from both three searches to resolve any ties in the minimax search
-def merge_monty_and_minmax(montycarlo, minmax, player):
-    # if the player is 2 then the weights are reversed
-    options = []
-    best_move = minmax[0][0]
-    # get the best moves from the minmax search
-    for i in range(len(minmax)):
-        if minmax[i][0] >= best_move:
-            best_move = minmax[i][0]
-            options.append((minmax[i][0], minmax[i][1], minmax[i][1]))
-
-    # merge the weights from both searches
-    for i in range(len(options)):
-        for j in range(len(montycarlo)):
-            if montycarlo[j][1] == convert_bit_move((options[i][1], options[i][2]))[0] and montycarlo[j][0][0] == convert_bit_move((options[i][1], options[i][2]))[0]:
-
-                # merge logic 
-                if player == 2:
-                    ratio = (montycarlo[j][2] + 1) / (montycarlo[j][1] + 1)
-                    if ratio > best_ratio:
-                        best_ratio = ratio
-                        best_move = (options[i][1], montycarlo[i][2])
-                else:
-                    ratio = (montycarlo[j][1] + 1) / (montycarlo[j][2] + 1)
-                    if ratio > best_ratio:
-                        best_ratio = ratio
-                        best_move = (options[i][1], montycarlo[i][2])
-
-    # update the best move attribute
-    minmax[-2] = best_move
-
-
-# start the processing of the minimax and Monty Carlo tree search
+# start the processing of the minimax tree search on a new thread to allow the GUI to run
 def start_processing(board : list, state : int, p_time, gui: object):
     manager = mp.Manager()
     return_dict = manager.dict()
@@ -99,46 +39,19 @@ def start_processing(board : list, state : int, p_time, gui: object):
     # initialize some values that will be needed
     return_dict["minmax"] = None
     return_dict["best_move"] = None
-    return_dict["montycarlo"] = []
     return_dict["depth"] = 0
     return_dict["eval"] = 0
     return_dict["leafs"] = 0
     return_dict["hashes"] = 0
-    return_dict["wins1"] = 0
-    return_dict["wins2"] = 0
 
-    # generate the first depth of the montycarlo tree to split up processing
-    invert_state = lambda x : 1 if x == 2 else 2
-    jump = False
-    if check_jump_required(board, state):
-        next_layer_boards = generate_all_options(board, state, True)
-        jump = True
-        
-    else:
-        next_layer_boards = generate_all_options(board, state, False)      
-
-    # prepare the processes
-    minmax = mp.Process(target=dynamic_depth, args=(board, state, p_time, return_dict, ))
-    
-    montycarlo_list = []
-    for child in next_layer_boards:
-        board_ = deepcopy(board)
-        update_board(child[0], child[1], board_)
-        state_ = check_jump_required(board_, state, child[1])
-        if state_ and jump:
-            state_ = state
-        else:
-            state_ = invert_state(state) 
-        montycarlo_list.append([state_, board_, child])
-    monty = mp.Process(target=dynamic_win, args=(montycarlo_list, return_dict, p_time, ))
+    # prepare the process
+    minmax = mp.Process(target=start_search, args=(board, state, p_time, return_dict, ))
 
     # start the processes
-    return_dict["done"] = False
     minmax.start()
-    monty.start()
 
     # update the values on the board as they are processed and continue to draw the board
-    while return_dict["done"] == False:
+    while return_dict["minmax"] == None:
         clock = pygame.time.Clock()
         # make another pygame loop for while the bot is thinking
         for event in pygame.event.get():
@@ -150,16 +63,30 @@ def start_processing(board : list, state : int, p_time, gui: object):
         gui.draw()
     # once minimax search ends montycarlo should end as well
     minmax.join()
-    monty.join()
 
     gui.update_params(return_dict)
-
-    merge_monty_and_minmax(return_dict["montycarlo"], return_dict["minmax"], state)
 
     # update hashes, leaves, and prunned branches
     return return_dict["minmax"]
 
 
+# parses the args and returns the correct data
+def parse_args(args):
+    time = 1
+    bot = False
+    if len(args) == 1:
+        return bot, time
+    search_time = args[1]
+    mode = args[2]
+    if mode == "bot":
+        bot = True
+    if search_time != "0":
+        time = float(search_time)
+
+    return bot, time
+
+
+# start the main loop of the game
 def main(args) -> None:
     size = (1000, 800)
     clock = pygame.time.Clock()
@@ -170,7 +97,7 @@ def main(args) -> None:
     board = Board()
     gui = Gui(board.board, size, clock, screen, 1) # must be initialized regardless of if a human is playing or not
 
-    # variables to keep track of some data that is integral to the game (allows for moves to not be repeated more than twice)
+    # variables to keep track of some data that is integral to the game (allows for tie detection and data collection for training the NN)
     p1_wins = 0
     p2_wins = 0
     turns = 0
@@ -178,22 +105,9 @@ def main(args) -> None:
     board_at_turn = []
     pieces_at_turn = []
 
-    # set variables based on args
-    if len(args) == 1:
-        args = ["","0", "human"]
+    # pars args
+    BOT_PLAYING, P_TIME = parse_args(args)
 
-    search_time = args[1]
-    mode = args[2]
-
-    if mode == "bot":
-        BOT_PLAYING = True
-    else:
-        BOT_PLAYING = False
-
-    if search_time != "0":
-        P_TIME = float(search_time)
-    else:
-        P_TIME = 1
     # main loop
     while True:
         # check for quit 
@@ -204,7 +118,7 @@ def main(args) -> None:
         # update any variables for data gathering : TODO add more
         turns += 1
 
-        # allow the player that's turn it is to make its move
+        # player 1's turn
         if player == 1:
 
             # Note: only have one ennabled or bad stuff happens
@@ -229,6 +143,7 @@ def main(args) -> None:
             if turn:
                 continue
 
+        # player 2's turn
         else:
             # the bot
             player2 = start_processing(board.board, 2, P_TIME, gui)
@@ -256,6 +171,7 @@ def main(args) -> None:
 
         # check for a win
         win = check_win(board.board, player)
+        tie = check_tie()
         if win == 1:
             # make another pygame loop for showing the win message
             start_time = process_time()
@@ -292,13 +208,14 @@ def main(args) -> None:
             p2_wins += 1
             turns = 0
 
-# if this is another process go straight to what it needs to do
-mp.freeze_support()
+
 # TODO put the logic to start the threads in its own file so this is not gross and bad
+# this seems to fix the problem with threads doing weird things when the program is packaged with pyinstaller
+mp.freeze_support()
 
 if __name__ == '__main__':
+    # import modules needed for the main thread
     import pygame
     from Gui import Gui
 
-if __name__ == '__main__':
     main(sys.argv)
