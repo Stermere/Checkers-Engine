@@ -29,6 +29,7 @@ class Gui(): # class to deal with the visual elements for the human player
         self.highlighted_blocks = []
         self.limited_options = []
         self.red_blocks = []
+        self.blue_blocks = []
         self.size = size
         self.clock = clock
         self.screen = screen
@@ -42,12 +43,14 @@ class Gui(): # class to deal with the visual elements for the human player
         self.eval = 0
         self.win_messsage = ""
 
-        self.draw()
-
     # the main loop that runs when the human player is choosing its next move (yes it is a horribly complicated function)
-    def choose_action(self) -> list:
+    def choose_action(self) -> tuple:
+        move = None
         clock = pygame.time.Clock()
         self.limited_options = check_jump_required(self.board, self.type)
+        if len(self.limited_options) == 1:
+            self.selected_block = self.limited_options[0]
+            self.highlighted_blocks = generate_options((self.selected_block[0],self.selected_block[1]), self.board, only_jump=True)
         running = True
         while running:
             mouse_button_click = []
@@ -68,21 +71,20 @@ class Gui(): # class to deal with the visual elements for the human player
                             if self.size[1] / 8 * x < mouse_x < self.size[1] / 8 * (x + 1)\
                                 and self.size[1] / 8 * y < mouse_y < self.size[1] / 8 * (y + 1):
                                 if (x, y) == block:
+                                    move = (tuple(self.selected_block),(x, y))
                                     hopped = update_board(tuple(self.selected_block), (x, y), self.board)
                                     self.selected_block = None
+                                    self.blue_blocks = move
                                     self.highlighted_blocks = []
                                     self.limited_options = []
                                     self.red_blocks = []
                                     if hopped:
                                         if not generate_options((x,y), self.board, only_jump=True) == []:
-                                            self.draw()
-                                            return True, None
+                                            return True, move
                                         else:
-                                            self.draw()
                                             running = False
                                             break
                                     else:
-                                        self.draw()
                                         running = False
                                         break
                         # check if the player selected a block
@@ -90,16 +92,16 @@ class Gui(): # class to deal with the visual elements for the human player
                              and self.size[1] / 8 * y < mouse_y < self.size[1] / 8 * (y + 1)\
                                  and (spot == self.type or spot == self.king_type):
                             if self.limited_options == []:
-                                self.selected_block = [x, y]
+                                self.selected_block = (x, y)
                                 self.highlighted_blocks = generate_options((x,y), self.board)
                             else:
                                 for i in self.limited_options:
                                     if i == (x, y):
-                                        self.selected_block = [x, y]
+                                        self.selected_block = (x, y)
                                         self.highlighted_blocks = generate_options((x,y), self.board, only_jump=True)
             self.draw()
             clock.tick(60)
-        return False, None
+        return False, move
 
     # draws the board
     def draw(self) -> None:
@@ -119,6 +121,9 @@ class Gui(): # class to deal with the visual elements for the human player
                 for piece in self.red_blocks:
                     if (x, y) == piece:
                         c = Gui.CR
+                for piece in self.blue_blocks:
+                    if (x, y) == piece:
+                        c = Gui.CL
                 for piece in self.highlighted_blocks:
                     if (x, y) == piece:
                         c = Gui.CM
@@ -127,7 +132,7 @@ class Gui(): # class to deal with the visual elements for the human player
                         c = Gui.CL
                 if rect[0] < mouse_x < rect[2] and rect[1] < mouse_y < rect[3]:
                     c = Gui.CP
-                elif [x, y] == self.selected_block:
+                if (x, y) == self.selected_block:
                     c = Gui.CS
                 pygame.draw.rect(self.screen, c, rect)
                 

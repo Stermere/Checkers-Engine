@@ -135,10 +135,11 @@ def main(args) -> None:
                 else:
                     turn = False
 
-                gui.limited_options = [chosen_move[0], chosen_move[1]]
+                gui.blue_blocks = [chosen_move[0], chosen_move[1]]
             # for human player
             else:
                 turn, chosen_move = gui.choose_action()
+                gui.blue_blocks = [chosen_move[0], chosen_move[1]]
 
             if turn:
                 continue
@@ -168,6 +169,8 @@ def main(args) -> None:
             gui.red_blocks = []
         else:
             player = 1
+            gui.blue_blocks = []
+
 
         # check for a win
         win = check_win(board.board, player)
