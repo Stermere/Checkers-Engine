@@ -61,11 +61,19 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, float
     if (check_for_entry(entry_index, hash) == 1){
         table->num_entries--;
         
+        // if the hashes are the same keep the current one imidiatly and update the depth and age
+        if (entry_index->hash == hash){
+            entry_index->depth = depth;
+            entry_index->age = age;
+            entry_index->eval = eval;
+            return;
+        }
+
         // if the entry is populated and the value stored is deamed more relevant return
         if (compare_hash_entries(entry_index, depth, age) == 1){
             return;
             }
-        }
+    }
     // if the entry is empty or the value stored is deamed less relevant add the new entry at the old entrys location
     entry_index->hash = hash;
     entry_index->eval = eval;
@@ -84,12 +92,25 @@ int check_for_entry(struct hash_table_entry* entry_index, unsigned long long int
     }
 }
 
+
 // returns the eval of a hash table entry if it exists and is the right hash value
 // if the entry does not exits or is the wrong hash value, returns NAN
 // also return NAN if the age of the entry is older than the current age
 float get_hash_entry(struct hash_table *table, unsigned long long int hash, int age){
     struct hash_table_entry* entry_index = table->table + (hash % table->size);
     if (entry_index->hash == hash && entry_index->age == age){
+        return entry_index->eval;
+    }
+    else{
+        return NAN;
+    }
+}
+
+// returns the eval of this position if it is the right age hash and depth, the depth is considered correct if 
+// it is equal to the current depth
+float get_hash_entry_depth_relative(struct hash_table *table, unsigned long long int hash, int age, int depth){
+    struct hash_table_entry* entry_index = table->table + (hash % table->size);
+    if (entry_index->hash == hash && entry_index->age == age && entry_index->depth == depth){
         return entry_index->eval;
     }
     else{
@@ -105,13 +126,12 @@ int compare_hash_entries(struct hash_table_entry *entry1, int depth, int age){
     if(entry1->age >= age){
         // less deep entrys store more work but are also less likly to be found again so
         // decide which one to keep is not trivial, for now we will keep the one with the lower depth
-        if (entry1->depth < depth){
+        if (entry1->depth >= depth){
             return 1;
         }
         else{
             return 0;
         }
-        return 1;
     }
     else {
         return 0;

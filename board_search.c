@@ -39,15 +39,16 @@ int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pla
 int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, int* save_loc, int* offsets, int only_jump);
 float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     struct set* piece_loc, int* offsets, int depth, float alpha, float beta, int captures_only, struct board_data* best_moves,
-    struct board_evaler* evaler, unsigned long long int hash);
-struct board_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth);
+    struct board_evaler* evaler, unsigned long long int hash, int depth_abs);
+struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth);
 void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k);
 long long n_ply_search(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player, struct set* piece_loc, int* offsets, int depth);
 void merge(struct board_data* ptr, int half, int num_elements);
 void merge_sort(struct board_data* ptr, int num_elements);
 unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, unsigned long long int hash, struct board_evaler* evaler);
 struct board_data* get_best_move(struct board_data *head, int player);
-void end_board_search(struct board_info* best_moves, struct board_evaler* evaler);
+void end_board_search(struct board_data* best_moves, struct board_evaler* evaler);
+int free_board_data(struct board_data* data);
 
 // for some reason this has to be above the python stuff even if it is defined, otherwise it doesn't work
 
@@ -606,7 +607,7 @@ int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, in
 // the best_moves struct will be populated to the search depth at the end of this search
 float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     struct set* piece_loc, int* offsets, int depth, float alpha, float beta, int captures_only, struct board_data* best_moves,
-    struct board_evaler* evaler, unsigned long long int hash){
+    struct board_evaler* evaler, unsigned long long int hash, int depth_abs){
     // setup variables
     int player_next;
     float board_eval = 0.0;
@@ -621,10 +622,14 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         captures_only = True;
     }
 
+    // todo check bug here
     // check if this board has been searched to depth before and if so return the eval from the hash table
-    float potential_eval = get_hash_entry(evaler->hash_table, hash, evaler->search_depth);
+    float potential_eval = get_hash_entry_depth_relative(evaler->hash_table, hash, evaler->search_depth, depth_abs);
     if (!isnan(potential_eval)){
         evaler->boards_evaluated++;
+        best_moves->hash = hash;
+        best_moves->num_moves = -1;
+        best_moves->eval = potential_eval;
         return potential_eval;
     }
 
@@ -667,19 +672,22 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         // if there are no moves and captures only is false then a win has occured eval who won and return
         if (!captures_only){
             if (player == 1){
-                board_eval = -100.0 - depth;
+                board_eval = -200.0 + depth_abs;
             }
             else{
-                board_eval = 100.0 + depth;
+                board_eval = 200.0 - depth_abs;
             }
             evaler->boards_evaluated++;
             best_moves->eval = board_eval;
+
+            // store the board in the hash map
+            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth);
             
             return board_eval;
         }
         // if there are no moves and captures only is true then we found the end of a catures only search evaluate the position and return
         else{
-            board_eval = get_eval(*p1, *p2, *p1k, *p2k, piece_loc, evaler, depth, hash);
+            board_eval = get_eval(*p1, *p2, *p1k, *p2k, piece_loc, evaler, depth, hash, depth_abs);
             best_moves->eval = board_eval;
             evaler->boards_evaluated++;
             return board_eval;
@@ -710,7 +718,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         }
 
         // call the function recursivly 
-        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth - 1, alpha, beta, captures_only, temp_board, evaler, next_hash);
+        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth - 1, alpha, beta, captures_only, temp_board, evaler, next_hash, depth_abs + 1);
         
         // undo the update to the board and piece locations
         undo_piece_locations_update(temp_board->move_start, temp_board->move_end, piece_loc);
@@ -745,7 +753,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     best_moves->eval = board_eval;
 
     // store the eval in the hash table
-    add_hash_entry(evaler->hash_table, hash, board_eval, depth, evaler->search_depth);
+    add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth);
     
     return board_eval;
 }
@@ -753,7 +761,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 
 // prepare needed memory for a search and call the search function to find the best move and return a pointer to the memory 
 // location that holds the moves for the board ordered in the order best to worst
-struct board_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth){
+struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth){
     struct search_info* return_struct = malloc(sizeof(struct search_info));
 
     // malloc the data needed for the array (data needed is num spaces * nummovedir * sizeof(int))
@@ -779,7 +787,7 @@ struct board_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLo
         }
         // update the evalers search depth
         evaler->search_depth = i;
-        eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0, best_moves, evaler, hash);
+        eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0, best_moves, evaler, hash, 0);
         depth = i;
         // get the end time
         end = clock();
@@ -819,7 +827,7 @@ struct board_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLo
 }
 
 // clean up after the search has been concluded and the thread is about to exit
-void end_board_search(struct board_info* best_moves, struct board_evaler* evaler){
+void end_board_search(struct board_data* best_moves, struct board_evaler* evaler){
     // free the memory used by the evaler
     free(evaler->hash_table->table);
     free(evaler->hash_table);
@@ -830,7 +838,6 @@ void end_board_search(struct board_info* best_moves, struct board_evaler* evaler
 }
 
 // free the board tree from memory
-// TODO fix this function
 int free_board_data(struct board_data* data){
     if (data->num_moves <= -1){
         return 0;
