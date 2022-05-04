@@ -6,7 +6,7 @@
 import sys
 from time import process_time
 from bitboard_converter import convert_bit_move, convert_matrix_move, convert_to_bitboard, convert_to_matrix
-from Board_opperations import Board, check_jump_required, update_board, check_win
+from Board_opperations import Board, check_jump_required, update_board, check_win, check_tie
 import search_engine
 import multiprocessing as mp
 
@@ -171,7 +171,7 @@ def main(args) -> None:
 
         # check for a win
         win = check_win(board.board, player)
-        tie = check_tie()
+        tie = check_tie([])
         if win == 1:
             # make another pygame loop for showing the win message
             start_time = process_time()
