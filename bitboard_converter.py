@@ -28,8 +28,36 @@ def convert_to_bitboard(board):
     # return the new board
     return (p1bits, p2bits, p1kbits, p2kbits)
 
+# convert a bitboard move to a matrix board move
+def convert_to_matrix(p1, p2, p1k, p2k):
+    row = [0, 0, 0, 0, 0, 0, 0 ,0]
+    board = [row.copy(), row.copy(), row.copy(), row.copy(), row.copy(), row.copy(), row.copy(), row.copy()]
+    # loop through the elements of the board
+    for num in range(64):
+        # if player2 king
+        if p2k & (1 << num):
+            board[num//8][num%8] = 4
+        # if player1 king
+        elif p1k & (1 << num):
+            board[num//8][num%8] = 3
+        # if player 2 piece
+        elif p2 & (1 << num):
+            board[num//8][num%8] = 2
+        # if player 1 piece
+        elif p1 & (1 << num):
+            board[num//8][num%8] = 1
+        # if no piece
+        else:
+            board[num//8][num%8] = 0
+    return board
+
+# convert a matrix board move to a bit board move
+def convert_matrix_move(move):
+    # move is returned with init_pos final_pos format
+    return (move[0][0] + move[0][1]*8, move[1][0] + move[1][1]*8)
+
 
 # convert a bitboard move to a matrix board move
 def convert_bit_move(move):
-    # move is returned with (x, y format)
+    # move is returned with x, y format
     return ((move[0] % 8, move[0]//8), (move[1] % 8, move[1]//8))
