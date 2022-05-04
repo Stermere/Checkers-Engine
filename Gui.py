@@ -158,24 +158,20 @@ class Gui(): # class to deal with the visual elements for the human player
             (self.size[1] + 10, self.size[1]/8 * 2))
         self.screen.blit(pygame.font.SysFont('Corbel', 16).render(str(self.hashes), True, (0, 0, 0)),
                     (self.size[1] + 20, self.size[1]/8 * 2.5))
-        # draw the wins found by MontyCarlo generated
-        self.screen.blit(pygame.font.SysFont('Corbel', 18).render('Monty-Carlo (red/black):', True, (0, 0, 0)),
-            (self.size[1] + 10, self.size[1]/8 * 3))
-        self.screen.blit(pygame.font.SysFont('Corbel', 16).render(str(self.montycarlop1) + " : " + str(self.montycarlop2), True, (0, 0, 0)),
-                    (self.size[1] + 20, self.size[1]/8 * 3.5))
+
         # draw the depth
         self.screen.blit(pygame.font.SysFont('Corbel', 18).render('Depth Reached:', True, (0, 0, 0)),
-            (self.size[1] + 10, self.size[1]/8 * 4))
+            (self.size[1] + 10, self.size[1]/8 * 3))
         self.screen.blit(pygame.font.SysFont('Corbel', 16).render(str(self.depth), True, (0, 0, 0)),
-                    (self.size[1] + 20, self.size[1]/8 * 4.5))
+                    (self.size[1] + 20, self.size[1]/8 * 3.5))
         # draw the eval found by minimax
         self.screen.blit(pygame.font.SysFont('Corbel', 18).render('Board Eval:', True, (0, 0, 0)),
-            (self.size[1] + 10, self.size[1]/8 * 5))
+            (self.size[1] + 10, self.size[1]/8 * 4))
         self.screen.blit(pygame.font.SysFont('Corbel', 16).render(str(round(self.eval, 4)), True, (0, 0, 0)),
-                    (self.size[1] + 20, self.size[1]/8 * 5.5))
+                    (self.size[1] + 20, self.size[1]/8 * 4.5))
         # win message
         self.screen.blit(pygame.font.SysFont('Corbel', 20).render(self.win_messsage, True, (0, 0, 0)),
-                    (self.size[1] + 20, self.size[1]/8 * 6.5))
+                    (self.size[1] + 20, self.size[1]/8 * 5.5))
 
         pygame.display.update()
 
@@ -183,7 +179,5 @@ class Gui(): # class to deal with the visual elements for the human player
         self.leafs = data["leafs"]
         self.depth = data["depth"]
         self.hashes = data["hashes"]
-        self.montycarlop1 = data["wins1"]
-        self.montycarlop2 = data["wins2"]
         if data["leafs"] >  100:
             self.eval = data["eval"]
