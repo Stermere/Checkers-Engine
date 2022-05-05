@@ -4,11 +4,15 @@
 
 
 import sys
+import os
 from time import process_time
 from bitboard_converter import convert_bit_move, convert_matrix_move, convert_to_bitboard, convert_to_matrix
 from Board_opperations import Board, check_jump_required, update_board, check_win, check_tie
-import search_engine
 import multiprocessing as mp
+
+# import the search engine
+sys.path.insert(0, os.getcwd() + "/build/lib.win-amd64-3.9/")
+import search_engine
 
 
 # calls the board search algorithm and parses the results to the GUI 
@@ -29,6 +33,8 @@ def start_search(board : list, player : int, p_time : int, return_dict):
 
     # save the object in a touple interpretation to sent it back to the main thread
     return_dict["minmax"] = results
+
+    print(results)
 
 
 # start the processing of the minimax tree search on a new thread to allow the GUI to run
