@@ -24,15 +24,15 @@ class Board: # class to store the board data and update it accordingly
         #             [0, 1, 0, 1, 0, 1, 0, 1],
         #             [1, 0, 0, 0, 0, 0, 0, 0]]
         
-        # test position this is a forced tie
-        #self.board = [[0, 0, 0, 0, 0, 0, 0, 0],
-        #              [0, 0, 0, 0, 0, 0, 0, 0],
-        #              [0, 0, 0, 0, 0, 0, 0, 3],
-        #              [0, 0, 2, 0, 3, 0, 0, 0],
-        #              [0, 0, 0, 0, 0, 0, 0, 0],
-        #              [0, 0, 1, 0, 0, 0, 0, 0],
-        #              [0, 2, 0, 0, 0, 0, 0, 1],
-        #              [0, 0, 0, 0, 4, 0, 0, 0]]
+        # player 2 is winning they just need to find the right moves
+        self.board = [[0, 0, 0, 0, 0, 0, 0, 0],
+                      [0, 0, 0, 0, 0, 0, 0, 0],
+                      [0, 0, 0, 0, 0, 0, 0, 0],
+                      [0, 0, 2, 0, 3, 0, 0, 0],
+                      [0, 0, 0, 0, 0, 0, 0, 0],
+                      [0, 0, 0, 0, 0, 0, 0, 0],
+                      [0, 2, 0, 0, 0, 0, 0, 1],
+                      [0, 0, 0, 0, 4, 0, 0, 0]]
                     
     def reset_board(self, p1 : object) -> None:
         self.__init__()
