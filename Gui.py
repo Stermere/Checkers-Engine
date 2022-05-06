@@ -17,6 +17,7 @@ class Gui(): # class to deal with the visual elements for the human player
     CM = (174,181,161)
     CR = (174,141,121)
     CL = (174,181,181)
+    CZ = (154,161,161)
 
     def __init__(self, board: list, size : tuple, clock : object, screen : object, type_ : int) -> None:
         self.type = type_
@@ -123,17 +124,17 @@ class Gui(): # class to deal with the visual elements for the human player
                         c = Gui.CR
                 for piece in self.blue_blocks:
                     if (x, y) == piece:
-                        c = Gui.CL
+                        c = Gui.CZ
                 for piece in self.highlighted_blocks:
                     if (x, y) == piece:
                         c = Gui.CM
                 for piece in self.limited_options:
                     if (x, y) == piece:
                         c = Gui.CL
-                if rect[0] < mouse_x < rect[2] and rect[1] < mouse_y < rect[3]:
-                    c = Gui.CP
                 if (x, y) == self.selected_block:
                     c = Gui.CS
+                if rect[0] < mouse_x < rect[2] and rect[1] < mouse_y < rect[3]:
+                    c = (c[0] + 15, c[1] + 15, c[2] + 15)
                 pygame.draw.rect(self.screen, c, rect)
                 
         # draw the pieces
