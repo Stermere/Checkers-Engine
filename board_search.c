@@ -49,6 +49,7 @@ unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong 
 struct board_data* get_best_move(struct board_data *head, int player);
 void end_board_search(struct board_data* best_moves, struct board_evaler* evaler);
 int free_board_data(struct board_data* data);
+void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_data* head, int depth);
 
 // for some reason this has to be above the python stuff even if it is defined, otherwise it doesn't work
 
@@ -200,7 +201,7 @@ struct board_data* get_best_move(struct board_data *head, int player){
     }
     for (int i = 0; i < head->num_moves; i++){
 
-        if ((head->next_boards[i].eval * order) >= (best_move->eval * order)){
+        if ((head->next_boards[i].eval * order) > (best_move->eval * order)){
             best_move = head->next_boards + i;
         }
     }
@@ -613,8 +614,8 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     float board_eval = 0.0;
     int num_moves;
     int initial_piece_type;
-    float min_eval = 1000.0;
-    float max_eval = -1000.0;
+    float min_eval = INFINITY;
+    float max_eval = -INFINITY;
     unsigned long long int next_hash;
     struct board_data* temp_board;
     // if the depth is 0 then we are at the end of the standard search so begin the captures search
@@ -622,23 +623,12 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         captures_only = True;
     }
 
-    // todo check bug here
-    // check if this board has been searched to depth before and if so return the eval from the hash table
-    float potential_eval = get_hash_entry_depth_relative(evaler->hash_table, hash, evaler->search_depth, depth_abs);
-    if (!isnan(potential_eval)){
-        evaler->boards_evaluated++;
-        best_moves->hash = hash;
-        best_moves->num_moves = -1;
-        best_moves->eval = potential_eval;
-        return potential_eval;
-    }
-
-
     // get the moves for this board and player combo or use the moves generated from the last depth search
     if (best_moves->num_moves == -1){
         int moves[96];
         num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, offsets, captures_only);
         // put all the moves into the best moves struct and fill this layer of the tree to the extent that we can
+        // this might be a momory leak
         if (!captures_only){
             best_moves->num_moves = num_moves;
         }
@@ -672,27 +662,37 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         // if there are no moves and captures only is false then a win has occured eval who won and return
         if (!captures_only){
             if (player == 1){
-                board_eval = -200.0 + depth_abs;
+                board_eval = -1000.0 + depth_abs;
             }
             else{
-                board_eval = 200.0 - depth_abs;
+                board_eval = 1000.0 - depth_abs;
             }
             evaler->boards_evaluated++;
             best_moves->eval = board_eval;
 
             // store the board in the hash map
-            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth);
+            //add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth);
             
             return board_eval;
         }
         // if there are no moves and captures only is true then we found the end of a catures only search evaluate the position and return
         else{
-            board_eval = get_eval(*p1, *p2, *p1k, *p2k, piece_loc, evaler, depth, hash, depth_abs);
+            board_eval = get_eval(*p1, *p2, *p1k, *p2k, piece_loc, evaler, depth, hash, depth_abs, player);
             best_moves->eval = board_eval;
             evaler->boards_evaluated++;
             return board_eval;
         }
     }
+
+    // check if this board has been searched to depth before and if so return the eval from the hash table
+    float potential_eval = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs, player);
+    if (!isnan(potential_eval)){
+        evaler->boards_evaluated++;
+        best_moves->hash = hash;
+        best_moves->eval = potential_eval;
+        return potential_eval;
+    }
+
     temp_board = best_moves->next_boards;
     // if there are moves then we need to search them all
     for (int i = 0; i < num_moves; i++){
@@ -753,7 +753,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     best_moves->eval = board_eval;
 
     // store the eval in the hash table
-    add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth);
+    add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player);
     
     return board_eval;
 }
@@ -802,6 +802,9 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
             terminate = 1;
         }   
     }
+
+    // print the line of best moves to the terminal (deguggigng)
+    //print_line(p1, p2, p1k, p2k, best_moves, depth);
 
     // print some final info about the search
     // print 50 dashes
@@ -900,15 +903,15 @@ void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k){
     for (int i = 0; i < 64; i++){
         int piece_type = get_piece_at_location(p1, p2, p1k, p2k, i);
         if (piece_type == 1){
-            printf("1");
+            printf("1 ");
         } else if (piece_type == 2){
-            printf("2");
+            printf("2 ");
         } else if (piece_type == 3){
-            printf("3");
+            printf("3 ");
         } else if (piece_type == 4){
-            printf("4");
+            printf("4 ");
         } else {
-            printf("-");
+            printf("- ");
         }
         if ((i + 1) % 8 == 0){
             printf("\n");
@@ -917,12 +920,48 @@ void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k){
     printf("\n");
 }
 
+// print the expected line to standard out in a human readable format (for debugging)
+void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_data* head, int depth){
+    // print the line that the bot expects to happen
+    struct board_data *temp_board = head;
+    struct board_data *temp_temp_board;
+    float eval_temp = 0;
+    for (int t = 0; t < depth - 1; t++){
+        update_board(&p1, &p2, &p1k, &p2k, temp_board->move_start, temp_board->move_end);
+
+        // print the board and eval data
+        printf("eval: %f\n", temp_board->eval);
+
+        human_readble_board(p1, p2, p1k, p2k);
+        if (temp_board->player == 1){
+            temp_temp_board = temp_board->next_boards;
+            eval_temp = temp_temp_board->eval; 
+            for (int i = 0 ; i < temp_board->num_moves; i++){
+                if (temp_board->next_boards[i].eval > eval_temp){
+                    temp_temp_board = temp_board->next_boards + i;
+                    eval_temp = temp_temp_board->eval;
+                }
+            }
+        }
+        else if (temp_board->player == 2){
+            temp_temp_board = temp_board->next_boards;
+            eval_temp = temp_temp_board->eval; 
+            for (int i = 0 ; i < temp_board->num_moves; i++){
+                if (temp_board->next_boards[i].eval < eval_temp){
+                    temp_temp_board = temp_board->next_boards + i;
+                    eval_temp = temp_temp_board->eval;
+                }
+            }
+        }
+        temp_board = temp_temp_board;
+    }
+}
+
 
 // main function
 // runs a n_ply search to verify the move generation is working as expected
 // also benchmarks the time it takes to generate the moves
 int main(){
-
     // remove return to test the move generation
     return 0;
 

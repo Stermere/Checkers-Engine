@@ -17,6 +17,7 @@ class Gui(): # class to deal with the visual elements for the human player
     CM = (174,181,161)
     CR = (174,141,121)
     CL = (174,181,181)
+    CZ = (154,161,161)
 
     def __init__(self, board: list, size : tuple, clock : object, screen : object, type_ : int) -> None:
         self.type = type_
@@ -29,6 +30,7 @@ class Gui(): # class to deal with the visual elements for the human player
         self.highlighted_blocks = []
         self.limited_options = []
         self.red_blocks = []
+        self.blue_blocks = []
         self.size = size
         self.clock = clock
         self.screen = screen
@@ -42,12 +44,14 @@ class Gui(): # class to deal with the visual elements for the human player
         self.eval = 0
         self.win_messsage = ""
 
-        self.draw()
-
     # the main loop that runs when the human player is choosing its next move (yes it is a horribly complicated function)
-    def choose_action(self) -> list:
+    def choose_action(self) -> tuple:
+        move = None
         clock = pygame.time.Clock()
         self.limited_options = check_jump_required(self.board, self.type)
+        if len(self.limited_options) == 1:
+            self.selected_block = self.limited_options[0]
+            self.highlighted_blocks = generate_options((self.selected_block[0],self.selected_block[1]), self.board, only_jump=True)
         running = True
         while running:
             mouse_button_click = []
@@ -68,21 +72,20 @@ class Gui(): # class to deal with the visual elements for the human player
                             if self.size[1] / 8 * x < mouse_x < self.size[1] / 8 * (x + 1)\
                                 and self.size[1] / 8 * y < mouse_y < self.size[1] / 8 * (y + 1):
                                 if (x, y) == block:
+                                    move = (tuple(self.selected_block),(x, y))
                                     hopped = update_board(tuple(self.selected_block), (x, y), self.board)
                                     self.selected_block = None
+                                    self.blue_blocks = move
                                     self.highlighted_blocks = []
                                     self.limited_options = []
                                     self.red_blocks = []
                                     if hopped:
                                         if not generate_options((x,y), self.board, only_jump=True) == []:
-                                            self.draw()
-                                            return True, None
+                                            return True, move
                                         else:
-                                            self.draw()
                                             running = False
                                             break
                                     else:
-                                        self.draw()
                                         running = False
                                         break
                         # check if the player selected a block
@@ -90,16 +93,16 @@ class Gui(): # class to deal with the visual elements for the human player
                              and self.size[1] / 8 * y < mouse_y < self.size[1] / 8 * (y + 1)\
                                  and (spot == self.type or spot == self.king_type):
                             if self.limited_options == []:
-                                self.selected_block = [x, y]
+                                self.selected_block = (x, y)
                                 self.highlighted_blocks = generate_options((x,y), self.board)
                             else:
                                 for i in self.limited_options:
                                     if i == (x, y):
-                                        self.selected_block = [x, y]
+                                        self.selected_block = (x, y)
                                         self.highlighted_blocks = generate_options((x,y), self.board, only_jump=True)
             self.draw()
             clock.tick(60)
-        return False, None
+        return False, move
 
     # draws the board
     def draw(self) -> None:
@@ -119,16 +122,19 @@ class Gui(): # class to deal with the visual elements for the human player
                 for piece in self.red_blocks:
                     if (x, y) == piece:
                         c = Gui.CR
+                for piece in self.blue_blocks:
+                    if (x, y) == piece:
+                        c = Gui.CZ
                 for piece in self.highlighted_blocks:
                     if (x, y) == piece:
                         c = Gui.CM
                 for piece in self.limited_options:
                     if (x, y) == piece:
                         c = Gui.CL
-                if rect[0] < mouse_x < rect[2] and rect[1] < mouse_y < rect[3]:
-                    c = Gui.CP
-                elif [x, y] == self.selected_block:
+                if (x, y) == self.selected_block:
                     c = Gui.CS
+                if rect[0] < mouse_x < rect[2] and rect[1] < mouse_y < rect[3]:
+                    c = (c[0] + 15, c[1] + 15, c[2] + 15)
                 pygame.draw.rect(self.screen, c, rect)
                 
         # draw the pieces
@@ -158,24 +164,20 @@ class Gui(): # class to deal with the visual elements for the human player
             (self.size[1] + 10, self.size[1]/8 * 2))
         self.screen.blit(pygame.font.SysFont('Corbel', 16).render(str(self.hashes), True, (0, 0, 0)),
                     (self.size[1] + 20, self.size[1]/8 * 2.5))
-        # draw the wins found by MontyCarlo generated
-        self.screen.blit(pygame.font.SysFont('Corbel', 18).render('Monty-Carlo (red/black):', True, (0, 0, 0)),
-            (self.size[1] + 10, self.size[1]/8 * 3))
-        self.screen.blit(pygame.font.SysFont('Corbel', 16).render(str(self.montycarlop1) + " : " + str(self.montycarlop2), True, (0, 0, 0)),
-                    (self.size[1] + 20, self.size[1]/8 * 3.5))
+
         # draw the depth
         self.screen.blit(pygame.font.SysFont('Corbel', 18).render('Depth Reached:', True, (0, 0, 0)),
-            (self.size[1] + 10, self.size[1]/8 * 4))
+            (self.size[1] + 10, self.size[1]/8 * 3))
         self.screen.blit(pygame.font.SysFont('Corbel', 16).render(str(self.depth), True, (0, 0, 0)),
-                    (self.size[1] + 20, self.size[1]/8 * 4.5))
+                    (self.size[1] + 20, self.size[1]/8 * 3.5))
         # draw the eval found by minimax
         self.screen.blit(pygame.font.SysFont('Corbel', 18).render('Board Eval:', True, (0, 0, 0)),
-            (self.size[1] + 10, self.size[1]/8 * 5))
+            (self.size[1] + 10, self.size[1]/8 * 4))
         self.screen.blit(pygame.font.SysFont('Corbel', 16).render(str(round(self.eval, 4)), True, (0, 0, 0)),
-                    (self.size[1] + 20, self.size[1]/8 * 5.5))
+                    (self.size[1] + 20, self.size[1]/8 * 4.5))
         # win message
         self.screen.blit(pygame.font.SysFont('Corbel', 20).render(self.win_messsage, True, (0, 0, 0)),
-                    (self.size[1] + 20, self.size[1]/8 * 6.5))
+                    (self.size[1] + 20, self.size[1]/8 * 5.5))
 
         pygame.display.update()
 
@@ -183,7 +185,5 @@ class Gui(): # class to deal with the visual elements for the human player
         self.leafs = data["leafs"]
         self.depth = data["depth"]
         self.hashes = data["hashes"]
-        self.montycarlop1 = data["wins1"]
-        self.montycarlop2 = data["wins2"]
-        if data["leafs"] >  100:
+        if data["depth"] >  2:
             self.eval = data["eval"]

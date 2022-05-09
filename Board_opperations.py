@@ -1,4 +1,7 @@
 # board opperations for checkers
+# uses array indexes to specify the piece that is being moved
+# much easier to work with than a bit board but to slow to be used in the search so,
+# use bitboard_converters function to convert to and from bitboard
 
 class Board: # class to store the board data and update it accordingly
     def __init__(self) -> None:
@@ -21,15 +24,15 @@ class Board: # class to store the board data and update it accordingly
         #             [0, 1, 0, 1, 0, 1, 0, 1],
         #             [1, 0, 0, 0, 0, 0, 0, 0]]
         
-        # test position this is a forced tie
+        # player 2 is winning they just need to find the right moves
         #self.board = [[0, 0, 0, 0, 0, 0, 0, 0],
         #              [0, 0, 0, 0, 0, 0, 0, 0],
-        #              [0, 0, 0, 0, 0, 0, 0, 3],
-        #              [0, 0, 2, 0, 3, 0, 0, 0],
         #              [0, 0, 0, 0, 0, 0, 0, 0],
-        #              [0, 0, 1, 0, 0, 0, 0, 0],
-        #              [0, 2, 0, 0, 0, 0, 0, 1],
-        #              [0, 0, 0, 0, 4, 0, 0, 0]]
+        #              [0, 0, 0, 0, 3, 0, 0, 0],
+        #              [0, 0, 0, 0, 0, 0, 0, 4],
+        #              [0, 0, 0, 0, 4, 0, 0, 0],
+        #              [0, 0, 0, 0, 0, 0, 0, 0],
+        #              [0, 0, 0, 0, 0, 0, 0, 0]]
                     
     def reset_board(self, p1 : object) -> None:
         self.__init__()
@@ -102,7 +105,7 @@ def update_board(piece_pos : tuple, new_pos : tuple, board : list) -> bool:
 
 
 def check_jump_required(board : list, player : int, piece=False) -> list:
-    if not piece == False:
+    if piece != False:
         o = generate_options(piece, board, only_jump=True)
         return o
     if player == 1:
@@ -141,6 +144,10 @@ def check_win(board : list, next_player : int) -> int:
     else:
         return 0
 
+# return True if the game is a tie and False if not
+def check_tie(boards : list) -> bool:
+    return False
+
 
 def is_enemy_piece(piece, other_piece):
     if (piece == 1 or piece == 3) and (other_piece == 2 or other_piece == 4):
@@ -157,6 +164,6 @@ def undo_update_board(move, jumped_piece, jumped_piece_loc, moving_piece, board)
     board[move[1][1]][move[1][0]] = 0
 
     # if the move was a jump revert the piece that was jumped
-    if not jumped_piece == None:
+    if jumped_piece != None:
         board[jumped_piece_loc[1]][jumped_piece_loc[0]] = jumped_piece
 
