@@ -87,6 +87,7 @@ struct board_data *board_data_constructor(int player, int move_start, int move_e
     board->move_start = move_start;
     board->move_end = move_end;
     board->num_moves = -1;
+    board->next_boards = NULL;
     return board;
 }
 
@@ -628,7 +629,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         int moves[96];
         num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, offsets, captures_only);
         // put all the moves into the best moves struct and fill this layer of the tree to the extent that we can
-        // this might be a momory leak
+        // this is a memory leak (fix it)
         if (!captures_only){
             best_moves->num_moves = num_moves;
         }
@@ -636,7 +637,12 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         best_moves->player = player;
 
         if (num_moves > 0){
-            best_moves->next_boards = malloc(sizeof(struct board_data) * num_moves);  
+            if (best_moves->next_boards == NULL){
+                best_moves->next_boards = malloc(sizeof(struct board_data) * num_moves);  
+            }
+            else {
+                best_moves->next_boards = realloc(best_moves->next_boards, sizeof(struct board_data) * num_moves);
+            }
         }
         // fill the next boards with the moves that got them there
         for (int i = 0; i < num_moves; i++){
@@ -645,6 +651,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             temp_board->move_end = moves[(i * 2) + 1];
             temp_board->num_moves = -1;
             temp_board->player = -1;
+            temp_board->next_boards = NULL;
             temp_board->hash = 0ull;
         }
     }
