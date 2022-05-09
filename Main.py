@@ -23,8 +23,6 @@ def start_search(board : list, player : int, p_time : int, return_dict):
     p_depth = 25;
     results = search_engine.search_position(p1, p2, p1k, p2k, player, p_time, p_depth)
 
-    #print(results)
-
     # update the return dict (stops montycarlo if a search is terminated before the time constraint)
     return_dict["depth"] = results[-1][0]
     return_dict["leafs"] = results[-1][1]
@@ -33,8 +31,6 @@ def start_search(board : list, player : int, p_time : int, return_dict):
 
     # save the object in a touple interpretation to sent it back to the main thread
     return_dict["minmax"] = results
-
-    print(results)
 
 
 # start the processing of the minimax tree search on a new thread to allow the GUI to run
