@@ -24,6 +24,11 @@ void load_data_set_from_file(){
 
 }
 
+// initialize a fresh network with random weights and biases
+void generate_new_network(){
+
+}
+
 // function to load the neural network from a file
 void load_neural_network_from_file(){
 
@@ -38,3 +43,4 @@ void save_neural_network_to_file(){
 void calculate_actual_values(){
 
 }
+
