@@ -850,12 +850,14 @@ void end_board_search(struct board_data* best_moves, struct board_evaler* evaler
 // free the board tree from memory
 int free_board_data(struct board_data* data){
     if (data->num_moves <= -1){
+        free(data->next_boards);
         return 0;
     }
     int boards_freed = 0;
     for (int i = 0; i < data->num_moves; i++){
         boards_freed += free_board_data(&data->next_boards[i]);
     }
+    free(data->next_boards);
     return boards_freed + data->prunned_loc;
 }
 
