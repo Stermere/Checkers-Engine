@@ -998,11 +998,6 @@ int main(){
 
     int depth = 9;
 
-    // run the search
-    best_moves = start_board_search(p1, p2, p1k, p2k, player, 100, 12);
-
-    // exit for now as this is just a test
-    exit(1);
 
     clock_t start, end;
     double cpu_time_used;
