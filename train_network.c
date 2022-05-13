@@ -8,13 +8,15 @@
 
 // function to train the neural network using using a preloaded network and a training file
 // takes in a neural network file, a training file, epochs, and learning rate
-void train_network(){
+// returns 
+double train_network(){
 
 }
 
 // function to test the neural network using a preloaded network and a test file
 // takes in a neural network file and a test file
-void test_network(){
+// returns the error rate
+double test_network(){
 
 }
 
@@ -22,9 +24,29 @@ void test_network(){
 // function to verify the workings of the program structure
 void test_basic_functions(){
     // create a fresh neural network
-    struct neural_net *net = generate_new_network(32, 1, 3, 2);
+    struct neural_net *net = generate_new_network(128, 1, 5, 24);
     // print the network
-    print_network_to_stdio(net);
+    //print_network_to_stdio(net);
+
+    // push an input through the network
+    double startTime = (double)clock()/CLOCKS_PER_SEC;
+    populate_input(net, 96872345, 27654, 2698736, 342);
+    for (int i = 1; i < 1000000; i++){
+        forward_propagate(net);
+    }
+    forward_propagate(net);
+
+    // see how long it took
+    startTime = (double)clock()/CLOCKS_PER_SEC - startTime;
+    printf("Time to run forward prop: %f\n", startTime);
+
+    // print the output
+    
+    printf("output:");
+    for (int i = 0; i < net->layers[net->num_layers - 1].num_neurons; i++){
+        printf("\t%f\n", net->layers[net->num_layers - 1].neurons[i].output);
+    }
+    
 
 }
 

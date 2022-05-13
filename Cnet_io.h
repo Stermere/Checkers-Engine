@@ -4,6 +4,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+
 
 // structure for the neural network
 struct neural_net {
@@ -64,7 +66,11 @@ void save_neural_network_to_file(){
 
 
 // initialize a fresh network with random weights and biases
+// note: while the network will work with any number of inputs and outputs it 
+// is recommended to have the layer size as a multiple of 4
+// parameters: num_inputs, num_outputs, num_layers, hidden layer size
 struct neural_net* generate_new_network(int num_inputs, int num_outputs, int num_layers, int hidden_layer_size){
+    srand(time(NULL));
     struct neural_net *net = (struct neural_net*)malloc(sizeof(struct neural_net));
     net->num_inputs = num_inputs;
     net->num_outputs = num_outputs;
@@ -80,6 +86,12 @@ struct neural_net* generate_new_network(int num_inputs, int num_outputs, int num
             net->layers[i].neurons = (struct neuron*)malloc(sizeof(struct neuron) * num_inputs);
             temp_layer_size = num_inputs;
         }
+        // if this is the last layer then the output size is the number of outputs
+        else if (i == (num_layers - 1)){
+            net->layers[i].num_neurons = num_outputs;
+            net->layers[i].neurons = (struct neuron*)malloc(sizeof(struct neuron) * num_outputs);
+            temp_layer_size = num_outputs;
+        }
         // if this is a hidden layer then the input size is the number of neurons in the previous layer
         else {
             net->layers[i].num_neurons = hidden_layer_size;
@@ -92,7 +104,14 @@ struct neural_net* generate_new_network(int num_inputs, int num_outputs, int num
             net->layers[i].neurons[j].bias = 0;
             net->layers[i].neurons[j].output = 0;
             for (int k = 0; k < temp_last_layer_size; k++){
-                net->layers[i].neurons[j].weights[k] = rand() / (double)RAND_MAX;
+                int is_neg = rand() % 2;
+                if (is_neg){
+                    is_neg = -1;
+                } else {
+                    is_neg = 1;
+                }
+                // generate random weights between -1 and 1 that will not be too close to 0
+                net->layers[i].neurons[j].weights[k] = ((rand() / (double)RAND_MAX) +  0.01) * is_neg;
            }
         }
         temp_last_layer_size = temp_layer_size;
