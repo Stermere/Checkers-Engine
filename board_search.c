@@ -629,8 +629,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         int moves[96];
         num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, offsets, captures_only);
         // put all the moves into the best moves struct and fill this layer of the tree to the extent that we can
-        // this is a memory leak (fix it)
-        if (!captures_only){
+        if (!(captures_only && num_moves == 0)){
             best_moves->num_moves = num_moves;
         }
         // set the boards data
