@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 
 
 // structure for the neural network
@@ -59,22 +60,62 @@ void calculate_actual_values(struct data_set *data){
 
 
 // function to save the data set to a file
-void save_data_set_to_file(struct data_set *data){
+void save_data_set_to_file(struct data_set *data, char *file_name){
 
-}
+}   
 
 // function to load the data set from a file
-struct data_set* load_data_set_from_file(){
+struct data_set* load_data_set_from_file(char *filename){
 
 }
 
 // function to load the neural network from a file
-struct neural_net* load_neural_network_from_file(){
+struct neural_net* load_network_from_file(char *filename){
+    // open the file
+    FILE *file = fopen(filename, "r");
+    if (file == NULL){
+        printf("Error opening file\n");
+        exit(2);
+    }
+    // read the number of inputs
+    int num_inputs;
+    fscanf(file, "%d", &num_inputs);
+    // read the number of outputs
+    int num_outputs;
+    fscanf(file, "%d", &num_outputs);
+    // read the number of layers
+    int num_layers;
+    fscanf(file, "%d", &num_layers);
+    // read the number of neurons in each hidder layer
+    int num_neurons_hidden;
+    fscanf(file, "%d", &num_neurons_hidden);
+
+    // create the neural network
+    
 
 }
 
 // function to save the neural network to a file
-void save_neural_network_to_file(struct neural_net *net){
+void save_network_to_file(struct neural_net *net, char *filename){
+    // save the number of inputs, outputs, layer count, and the hidden layer sizes to the file
+    // then save the weights and biases for each layer to the file
+    FILE *file = fopen(filename, "w");
+    if (file == NULL){
+        printf("Error opening file!\n");
+        exit(2);
+    }
+
+    fprintf(file, "%d %d %d %d\n", net->num_inputs, net->num_outputs, net->num_layers, net->layers[1].num_neurons);
+    // now in order of layers from input to output save the weights and biases for each layer
+    for (int i = 0; i < net->num_layers; i++){
+        for (int j = 0; j < net->layers[i].num_neurons; j++){
+            for (int k = 0; k < net->layers[i].neurons[j].prev_layer_neurons_num; k++){
+                fprintf(file, "%f ", net->layers[i].neurons[j].weights[k]);
+            }
+            fprintf(file, "%f\n", net->layers[i].neurons[j].bias);
+        }
+    }
+    fclose(file);
 
 }
 

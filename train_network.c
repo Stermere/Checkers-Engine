@@ -42,6 +42,7 @@ void test_basic_functions(){
     double startTime = (double)clock()/CLOCKS_PER_SEC;
     populate_input(net, 96872345, 27654, 2698736, 342);
     for (int i = 1; i < 1000000; i++){
+        populate_input(net, 96872345, 27654, 2698736, 342);
         forward_propagate(net);
     }
     forward_propagate(net);
@@ -99,6 +100,23 @@ void test_backpropagation(){
 
     // print the network
     //print_network_to_stdio(net);
+
+    // save the network
+    save_network_to_file(net, "neural_net/test_network.nn");
+
+    // load the network
+    struct neural_net *net2 = load_network_from_file("neural_net/test_network.nn");
+
+    // test the network
+    populate_input(net2, 24535243356 , 467873452341, 78964534231, 23454567789);
+    forward_propagate(net2);
+
+    // print the output
+    printf("output:");
+    for (int i = 0; i < net2->layers[net2->num_layers - 1].num_neurons; i++){
+        printf("\t%f\n", net2->layers[net2->num_layers - 1].neurons[i].output);
+    }
+
 
 }
 
