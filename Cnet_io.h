@@ -8,6 +8,10 @@
 #include <string.h>
 
 
+// declerations
+struct neural_net* generate_new_network(int num_inputs, int num_outputs, int num_layers, int hidden_layer_size);
+
+
 // structure for the neural network
 struct neural_net {
     int num_inputs;
@@ -71,8 +75,14 @@ struct data_set* load_data_set_from_file(char *filename){
 
 // function to load the neural network from a file
 struct neural_net* load_network_from_file(char *filename){
+
+    // append the .nn to the filename
+    char *new_filename = malloc(strlen(filename) + 5);
+    strcpy(new_filename, filename);
+    strcat(new_filename, ".nn");
+
     // open the file
-    FILE *file = fopen(filename, "r");
+    FILE *file = fopen(new_filename, "r");
     if (file == NULL){
         printf("Error opening file\n");
         exit(2);
@@ -91,7 +101,37 @@ struct neural_net* load_network_from_file(char *filename){
     fscanf(file, "%d", &num_neurons_hidden);
 
     // create the neural network
+    // this isnt the most efficient way to do this but it works and its not too bad
+    struct neural_net *net = generate_new_network(num_inputs, num_outputs, num_layers, num_neurons_hidden);
+
+    // read the weights and biases and put them in the network
+    // first read the first layer since it is only for inputs
+    for (int i = 0; i < net->layers[0].num_neurons; i++){
+        fscanf(file, "%lf", &net->layers[0].neurons[i].bias);
+    }
+    // then read the hidden layers
+    for (int i = 1; i < net->num_layers - 1; i++){
+        for (int j = 0; j < net->layers[i].num_neurons; j++){
+            for (int k = 0; k < net->layers[i-1].num_neurons; k++){
+                fscanf(file, "%lf", &net->layers[i].neurons[j].weights[k]);
+            }
+            fscanf(file, "%lf", &net->layers[i].neurons[j].bias);
+        }
+    }
+    // finally read in the output layer
+    for (int i = 0; i < net->layers[net->num_layers - 1].num_neurons; i++){
+        for (int j = 0; j < net->layers[net->num_layers - 2].num_neurons; j++){
+            fscanf(file, "%lf", &net->layers[net->num_layers - 1].neurons[i].weights[j]);
+        }
+        fscanf(file, "%lf", &net->layers[net->num_layers - 1].neurons[i].bias);
+    }
     
+
+    // close the file
+    fclose(file);
+
+    // return the network
+    return net;
 
 }
 
@@ -99,8 +139,16 @@ struct neural_net* load_network_from_file(char *filename){
 void save_network_to_file(struct neural_net *net, char *filename){
     // save the number of inputs, outputs, layer count, and the hidden layer sizes to the file
     // then save the weights and biases for each layer to the file
-    FILE *file = fopen(filename, "w");
+
+    // add a extension to the file name
+    char *new_filename = malloc(strlen(filename) + 5);
+    strcpy(new_filename, filename);
+    strcat(new_filename, ".nn");
+
+
+    FILE *file = fopen(new_filename, "w");
     if (file == NULL){
+        perror("File NOT Opened");
         printf("Error opening file!\n");
         exit(2);
     }
