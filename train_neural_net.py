@@ -23,9 +23,9 @@ import search_engine
 # function to turn a game in to the file type needed for training
 # input: game data
 # output: file type
-def game_to_file(game):
+def game_to_file(game, file_name = "game_data.ds"):
     # create a file
-    file = open("data_set/test1.ds", "w")
+    file = open(file_name, "w")
     # write the game data to the file
     file.write(f"{game[-1]} {game[-2]}\n")
     for i in range(len(game) - 2):
@@ -50,7 +50,7 @@ def game_to_file(game):
 def play_game():
     # create a board
     board = Board()
-    search_time = 0.1
+    search_time = 2.5
     # create a list to store the game data
     game = []
     num_moves = 0
@@ -113,20 +113,27 @@ def play_game():
     game.append(final_state)
 
     # return the game data
+    print("Game concluded saving data...")
     return game
 
 
 # main function
 def main():
-
     # generate a game data file by playing a game
-    game = play_game()
-
+    #for i in range(1000):
+    #    game = play_game()
+    #    game_to_file(game, "data_set/pre/pre_training_data" + str(i) + ".ds")
+#
+    # for playing one game
+    #game = play_game()
     # convert the game data to a file
-    game_to_file(game)
+    #game_to_file(game)
+    #print("Data generated! exiting...")
 
-    print("Game complete!")
-
+    # train the neural network using the data set
+    print("Training the neural network...")
+    
+    
 
 # call the main function
 if __name__ == "__main__":
