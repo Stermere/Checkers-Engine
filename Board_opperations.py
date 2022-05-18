@@ -14,15 +14,15 @@ class Board: # class to store the board data and update it accordingly
                       [0, 1, 0, 1, 0, 1, 0, 1],
                       [1, 0, 1, 0, 1, 0, 1, 0]]
 
-        # test board for endgame positions
-        #self.board = [[0, 0, 0, 0, 0, 2, 0, 2],
-        #             [0, 0, 2, 0, 0, 0, 2, 0],
-        #             [0, 0, 0, 0, 0, 2, 0, 2],
-        #             [1, 0, 2, 0, 0, 0, 0, 0],
-        #             [0, 0, 0, 1, 0, 1, 0, 2],
+        # game ending in a tie
+        #self.board = [[0, 0, 0, 0, 0, 0, 0, 0],
+        #             [0, 0, 4, 0, 0, 0, 0, 0],
         #             [0, 0, 0, 0, 0, 0, 0, 0],
-        #             [0, 1, 0, 1, 0, 1, 0, 1],
-        #             [1, 0, 0, 0, 0, 0, 0, 0]]
+        #             [0, 0, 0, 0, 0, 0, 0, 0],
+        #             [0, 0, 0, 0, 0, 0, 0, 0],
+        #             [0, 0, 0, 0, 0, 0, 3, 0],
+        #             [0, 0, 0, 0, 0, 0, 0, 0],
+        #             [0, 0, 0, 0, 0, 0, 0, 0]]
         
         # player 2 is winning they just need to find the right moves
         #self.board = [[0, 0, 0, 0, 0, 0, 0, 0],
@@ -146,7 +146,17 @@ def check_win(board : list, next_player : int) -> int:
 
 # return True if the game is a tie and False if not
 def check_tie(boards : list) -> bool:
+    # if the same board comes up three time then it is a tie
+    for board in boards:
+        count = 0
+        for b in boards:
+            if board == b:
+                count += 1
+        if count >= 3:
+            return True
     return False
+                
+
 
 
 def is_enemy_piece(piece, other_piece):
