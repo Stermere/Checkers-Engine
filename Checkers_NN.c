@@ -3,23 +3,108 @@
 // Models are saved to a file after training is complete
 
 #include "Cneural_net.h"
-//#include <Python.h>
+#define PY_SSIZE_T_CLEAN
+#include <Python.h>
+
+
+// python wrapper for train_network and test_network
+////////////////////////////////////////////
+
+// train the neural network
+static PyObject* train_net(PyObject *self, PyObject *args){
+
+    char *net_file[50];
+    char *train_file[50];
+    int epochs;
+    double learning_rate;
+
+    // get the arguments from python
+    if (!Pyarg_Parsetuple(args, "ss", net_file, train_file, &epochs, &learning_rate))
+        return NULL;
+
+    
+}
+
+// test the neural network
+static PyObject* test_net(PyObject *self, PyObject *args){
+
+    char net_file[50];
+    char train_file[50];
+
+    // get the arguments from python
+    if (!Pyarg_Parsetuple(args, "ss", &net_file[0], &train_file[0]))
+        return NULL;
+
+    printf("%s\n", &net_file[0]);
+    printf("%s\n", &train_file[0]);
+
+    
+}
+
+// tell the pyhton interpreter about the functions we want to use
+static PyMethodDef c_neural_net[] = {
+    {"train_net", train_net, METH_VARARGS, 
+    "train the neural network"},
+    {"test_net", test_net, METH_VARARGS,
+    "test the neural network"},
+    {NULL, NULL, 0, NULL}
+};
+
+// define the module
+static struct PyModuleDef checkers_NN = {
+    PyModuleDef_HEAD_INIT,
+    "neural_network module",
+    "train and test neural networks",
+    -1,
+    c_neural_net
+
+};
+
+PyMODINIT_FUNC
+PyInit_search_engine(void){
+    return PyModule_Create(&checkers_NN);
+}
+
+////////////////////////////////////////////
 
 
 // function to train the neural network using using a preloaded network and a training file
-// takes in a neural network file, a loaded data set, epochs, and learning rate
+// takes in a neural network, a loaded data set, epochs, learning rate and a file to save the model to
 // Models are saved to a file after training is complete
-double train_network(struct neural_net *net, struct data_set *data, int num_games, int epochs, double learning_rate){
+// assumes one output neuron
+double train_network(struct neural_net *net, struct data_set *data, int epochs, double learning_rate, char *filename){
+    int i;
+    double error;
+    for(i = 0; i < epochs; i++){
+        error = 0;
+        for (int j = 0; j < data->move_num; j++){
+            populate_input(net, data->game_data[j].p1, data->game_data[j].p2, data->game_data[j].p1k, data->game_data[j].p2k);
+            forward_propagate(net);
+            back_propagate(net, learning_rate, &data->game_data[j].true_eval);
+            error += net->layers[net->num_layers - 1].neurons[0].error;
 
-    return 0.0;
+        }
+        error = error / data->move_num;
+        printf("Epoch %d: %f\n", i, error);
+    }
+    save_network_to_file(net, filename);
+    return error;
 }
 
 // function to test the neural network using a preloaded network and a test file
 // takes in a neural and a data set
 // returns the error rate
 double test_network(struct neural_net *net, struct data_set *data){
+    double error;
+    error = 0;
+    for (int j = 0; j < data->move_num; j++){
+        populate_input(net, data->game_data[j].p1, data->game_data[j].p2, data->game_data[j].p1k, data->game_data[j].p2k);
+        forward_propagate(net);
+        // calculate the error
+        error += error_tanh_out(net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
+    }
 
-    return 0.0;
+    return error / data->move_num;
 
 }
 
