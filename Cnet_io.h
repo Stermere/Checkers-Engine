@@ -51,26 +51,56 @@ struct board_data{
     long long int p2k;
 };
 
-// function to load the data set from the python list input
-void load_data_set_from_py(){
-
-}
-
-// function to calculate the actual values of the data set (only for when converting from python)
-// takes in the data set
-void calculate_actual_values(struct data_set *data){
-
-}
-
-
 // function to save the data set to a file
-void save_data_set_to_file(struct data_set *data, char *file_name){
+void save_data_set_to_file(struct data_set *data, char *filename){
+    // prepare the file to write to
+    char *new_filename = malloc(strlen(filename) + 5);
+    strcpy(new_filename, filename);
+    strcat(new_filename, ".ds");
 
+    // open the file
+    FILE *file = fopen(new_filename, "w");
+
+    // write the data set to the file
+    fprintf(file, "%d ", data->endgame_state);
+    fprintf(file, "%d\n", data->move_num);
+    for (int i = 0; i < data->move_num; i++){
+        fprintf(file, "%lld ", data->game_data[i].p1);
+        fprintf(file, "%lld ", data->game_data[i].p2);
+        fprintf(file, "%lld ", data->game_data[i].p1k);
+        fprintf(file, "%lld ", data->game_data[i].p2k);
+        fprintf(file, "%lf\n", data->game_data[i].true_eval);
+    }
+
+    // close the file
+    fclose(file);
 }   
 
 // function to load the data set from a file
 struct data_set* load_data_set_from_file(char *filename){
+    // prepare the file to read from
+    char *new_filename = malloc(strlen(filename) + 5);
+    strcpy(new_filename, filename);
+    strcat(new_filename, ".ds");
 
+    // open the file
+    FILE *file = fopen(new_filename, "r");
+
+    // read the data set from the file
+    struct data_set *data = malloc(sizeof(struct data_set));
+    fscanf(file, "%d", &data->endgame_state);
+    fscanf(file, "%d", &data->move_num);
+    data->game_data = malloc(sizeof(struct board_data) * data->move_num);
+    for (int i = 0; i < data->move_num; i++){
+        fscanf(file, "%lld", &data->game_data[i].p1);
+        fscanf(file, "%lld", &data->game_data[i].p2);
+        fscanf(file, "%lld", &data->game_data[i].p1k);
+        fscanf(file, "%lld", &data->game_data[i].p2k);
+        fscanf(file, "%lf", &data->game_data[i].true_eval);
+    }
+
+    // close the file
+    fclose(file);
 }
 
 // function to load the neural network from a file
@@ -132,7 +162,6 @@ struct neural_net* load_network_from_file(char *filename){
 
     // return the network
     return net;
-
 }
 
 // function to save the neural network to a file

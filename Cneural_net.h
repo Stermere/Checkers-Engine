@@ -28,7 +28,7 @@ double get_output(struct neural_net *net, long long int p1, long long int p2, lo
     // run the network
     forward_propagate(net);
     // get the output
-    return 0.0;
+    return net->layers[net->num_layers - 1].neurons[0].output;
 }
 
     

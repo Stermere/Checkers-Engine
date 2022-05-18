@@ -8,13 +8,9 @@
 
 // function to train the neural network using using a preloaded network and a training file
 // takes in a neural network file, a loaded data set, epochs, and learning rate
-// returns 
-double train_network(struct neural_net *net, struct data_set *data, int epochs, double learning_rate){
-    // load the data set
-    // load the neural network
-    // run the training
-    // save the network
-    // return the error
+// Models are saved to a file after training is complete
+double train_network(struct neural_net *net, struct data_set *data, int num_games, int epochs, double learning_rate){
+
     return 0.0;
 }
 
@@ -22,10 +18,7 @@ double train_network(struct neural_net *net, struct data_set *data, int epochs, 
 // takes in a neural and a data set
 // returns the error rate
 double test_network(struct neural_net *net, struct data_set *data){
-    // load the data set
-    // load the neural network
-    // run the test
-    // return the error rate
+
     return 0.0;
 
 }
@@ -63,7 +56,7 @@ void test_basic_functions(){
 
 void test_backpropagation(){
     // create a fresh neural network
-    struct neural_net *net = generate_new_network(128, 4, 5, 24);
+    struct neural_net *net = generate_new_network(128, 4, 100, 16);
     double startTime = (double)clock()/CLOCKS_PER_SEC;
     populate_input(net, 24535243356 , 467873452341, 78964534231, 23454567789);
 
@@ -123,6 +116,7 @@ void test_backpropagation(){
 
 
 int main(){
+    return 1;
     //test_basic_functions();
     test_backpropagation();
 
