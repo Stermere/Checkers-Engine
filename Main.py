@@ -100,12 +100,8 @@ def main(args) -> None:
     gui = Gui(board.board, size, clock, screen, 1) # must be initialized regardless of if a human is playing or not
 
     # variables to keep track of some data that is integral to the game (allows for tie detection and data collection for training the NN)
-    p1_wins = 0
-    p2_wins = 0
     turns = 0
-    moves_at_turn = []
-    board_at_turn = []
-    pieces_at_turn = []
+    game_history = []
 
     # pars args
     BOT_PLAYING, P_TIME = parse_args(args)
@@ -117,13 +113,13 @@ def main(args) -> None:
                 if event.type == pygame.QUIT:
                     sys.exit()
 
-        # update any variables for data gathering : TODO add more
+        # update any variables for data gathering
         turns += 1
+        game_history.append(convert_to_bitboard(board.board))
 
         # player 1's turn
         if player == 1:
 
-            # Note: only have one ennabled or bad stuff happens
             # for bot on bot
             if BOT_PLAYING:
                 # the bot
@@ -176,12 +172,12 @@ def main(args) -> None:
 
         # check for a win
         win = check_win(board.board, player)
-        tie = check_tie([])
+        tie = check_tie(game_history)
         if win == 1:
             # make another pygame loop for showing the win message
             start_time = process_time()
             gui.win_messsage = "Player one wins!"
-            while process_time() - start_time < 3:
+            while process_time() - start_time < 2:
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         pygame.quit()
@@ -192,14 +188,14 @@ def main(args) -> None:
             board.reset_board(gui)
             gui = Gui(board.board, size, clock, screen, 1)
             player = 1
-            p1_wins += 1
             turns = 0
+            game_history = []
 
         elif win == 2:
             # make another pygame loop for showing the win message
             start_time = process_time()
             gui.win_messsage = "Player two wins!"
-            while process_time() - start_time < 3:
+            while process_time() - start_time < 2:
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         pygame.quit()
@@ -210,8 +206,26 @@ def main(args) -> None:
             board.reset_board(gui)
             gui = Gui(board.board, size, clock, screen, 1)
             player = 1
-            p2_wins += 1
             turns = 0
+            game_history = []
+
+        elif tie:
+            # make another pygame loop for showing the win message
+            start_time = process_time()
+            gui.win_messsage = "Tie!"
+            while process_time() - start_time < 2:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        sys.exit()
+                gui.draw()
+                clock.tick(60)
+            print('Tie game')
+            board.reset_board(gui)
+            gui = Gui(board.board, size, clock, screen, 1)
+            player = 1
+            turns = 0
+            game_history = []
 
 
 # TODO put the logic to start the threads in its own file so this is not gross and bad
