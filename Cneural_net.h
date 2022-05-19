@@ -17,6 +17,7 @@ double error_relu_hidden(double weight, double error, double activation);
 double error_tanh_out(double activation, double target);
 void update_weights(struct neural_net *net, double learning_rate);
 double transfer_tanh_deriv(double activation);
+double error_relu_out(double activation, double target);
 
 /////////////////////////////////////////////////////////////////
 // checkers oriented functions
@@ -35,22 +36,30 @@ double get_output(struct neural_net *net, long long int p1, long long int p2, lo
 // put the input in to the first layers output
 void populate_input(struct neural_net *net, long long int p1, long long int p2, long long int p1k, long long int p2k){
     struct layer *input_layer = net->layers;
-    int num_loops = net->num_inputs / 4;
     int v1 = 0;
-    int v2 = 32;
-    int v3 = 64;
-    int v4 = 96;
     int shift_amount = 1;
+    int num_loops = net->num_layers;
+    double input_value;
     for (int i = 0; i < num_loops; i++){
-        input_layer->neurons[v1].output = (double)((p1 >> shift_amount) & 1);
-        input_layer->neurons[v2].output = (double)((p2 >> shift_amount) & 1);
-        input_layer->neurons[v3].output = (double)((p1k >> shift_amount) & 1);
-        input_layer->neurons[v4].output = (double)((p2k >> shift_amount) & 1);
-        v1++;
-        v2++;
-        v3++;
-        v4++;
+        if (p1 >> shift_amount & 1 == 1){
+            input_value = 1.0;
+        }
+        else if (p2 >> shift_amount & 1 == 1){
+            input_value = -1.0;
+        }
+        else if (p1k >> shift_amount & 1 == 1){
+            input_value = 3.0;
+        }
+        else if (p2k >> shift_amount & 1 == 1){
+            input_value = -3.0;
+        }
+        else{
+            input_value = 0.0;
+        }
+
+        input_layer->neurons[v1].output = input_value;
         shift_amount += 2;
+        v1++;
     }
 }
 
@@ -58,10 +67,6 @@ void populate_input(struct neural_net *net, long long int p1, long long int p2, 
 ///////////////////////////////////////////////////////////////
 // begining of more generalized code
 
-// train the neural network
-void train(struct neural_net *net, struct data_set *data_set, int epochs, double learning_rate){
-
-}
 
 // back propogate the error
 void back_propagate(struct neural_net *net, double learning_rate, double *target){
@@ -69,7 +74,7 @@ void back_propagate(struct neural_net *net, double learning_rate, double *target
     struct layer *output_layer = net->layers + net->num_layers - 1;
     struct layer *current_layer = output_layer - 1;
     for (int i = 0; i < output_layer->num_neurons; i++){
-        output_layer->neurons[i].error = error_tanh_out(output_layer->neurons[i].output, target[i]);
+        output_layer->neurons[i].error = error_relu_out(output_layer->neurons[i].output, target[i]);
     }
     // then calculate the error for the hidden layers
     for (int i = net->num_layers - 2; i >= 0; i--){
@@ -110,7 +115,7 @@ void forward_propagate(struct neural_net *net){
     struct layer* last_layer = net->layers;
     struct layer* current_layer = net->layers + 1;
     int current_layer_index = 1;
-    int num_layers = net->num_layers;
+    int num_layers = net->num_layers - 1;
     // loop through the layers
     for (int i = 1; i < num_layers; i++){
         // loop throught the neurons in the layer
@@ -126,9 +131,11 @@ void forward_propagate(struct neural_net *net){
     }
     // last layer is the output layer
     // so put it through the tanh function
-    int num_neurons = net->layers[num_layers - 1].num_neurons;
+    int num_neurons = net->layers[num_layers].num_neurons;
     for (int i = 0; i < num_neurons; i++){
-        last_layer->neurons[i].output = transfer_tanh(last_layer->neurons[i].output);
+        activation(current_layer->neurons + i, last_layer);
+        printf("outptut: %f\n", current_layer->neurons[i].output);
+        current_layer->neurons[i].output = transfer_relu(current_layer->neurons[i].output);
     }
 }
 
@@ -159,15 +166,15 @@ double transfer_relu(double activation){
     if (activation > 0.0){
         return activation;
     }
-    return activation * 0.15;
+    return 0.0;
 }
 
 // returns the derivative of the ReLU function
 double transfer_relu_deriv(double activation){
-    if (activation > 0.0){
+    if (activation >= 0.0){
         return 1.0;
     }
-    return 0.15;
+    return 0.0;
 }
 
 // return the error of the output

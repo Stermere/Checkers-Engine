@@ -6,6 +6,11 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
+// declerations
+double train_network(struct neural_net *net, struct data_set *data, int epochs, double learning_rate, char *filename);
+double test_network(struct neural_net *net, struct data_set *data);
+
+
 
 // python wrapper for train_network and test_network
 ////////////////////////////////////////////
@@ -13,31 +18,71 @@
 // train the neural network
 static PyObject* train_net(PyObject *self, PyObject *args){
 
-    char *net_file[50];
-    char *train_file[50];
+    char net_file_arr[50];
+    char train_file_arr[50];
+
+    char* net_file = &net_file_arr[0];
+    char* train_file = &train_file_arr[0];
+
     int epochs;
     double learning_rate;
 
-    // get the arguments from python
-    if (!Pyarg_Parsetuple(args, "ss", net_file, train_file, &epochs, &learning_rate))
-        return NULL;
+    Py_buffer* net_buf = (Py_buffer*)malloc(sizeof(Py_buffer));
+    Py_buffer* train_buf = (Py_buffer*)malloc(sizeof(Py_buffer));
 
-    
+    // get the arguments from python
+    if (!PyArg_ParseTuple(args, "s*s*id", net_buf, train_buf, &epochs, &learning_rate)){
+        return NULL;
+    }
+
+    // copy the buffer to a string
+    // print net_buf->buf
+    strcpy(net_file, net_buf->buf);
+    strcpy(train_file, train_buf->buf);
+
+    // train the network
+    struct neural_net* net = load_network_from_file(net_file);
+    struct data_set* data = load_data_set_from_file(train_file);
+
+    double error;
+    error = train_network(net, data, epochs, learning_rate, net_file);
+
+    save_network_to_file(net, net_file);
+
+    // return the error
+    return Py_BuildValue("d", error);
 }
 
 // test the neural network
 static PyObject* test_net(PyObject *self, PyObject *args){
 
-    char net_file[50];
-    char train_file[50];
+    char net_file_arr[50];
+    char train_file_arr[50];
+
+    char* net_file = &net_file_arr[0];
+    char* train_file = &train_file_arr[0];
+
+    Py_buffer* net_buf = (Py_buffer*)malloc(sizeof(Py_buffer));
+    Py_buffer* train_buf = (Py_buffer*)malloc(sizeof(Py_buffer));
 
     // get the arguments from python
-    if (!Pyarg_Parsetuple(args, "ss", &net_file[0], &train_file[0]))
+    if (!PyArg_ParseTuple(args, "s*s*", net_buf, train_buf)){
         return NULL;
+    }
 
-    printf("%s\n", &net_file[0]);
-    printf("%s\n", &train_file[0]);
+    // copy the buffer to a string
+    strcpy(net_file, net_buf->buf);
+    strcpy(train_file, train_buf->buf);
 
+    // test the network
+    struct neural_net* net = load_network_from_file(net_file);
+    struct data_set* data = load_data_set_from_file(train_file);
+    double error;
+
+    error = test_network(net, data);
+
+    // return the error
+    return Py_BuildValue("d", error);
     
 }
 
@@ -61,31 +106,29 @@ static struct PyModuleDef checkers_NN = {
 };
 
 PyMODINIT_FUNC
-PyInit_search_engine(void){
+PyInit_checkers_NN(void){
     return PyModule_Create(&checkers_NN);
 }
 
 ////////////////////////////////////////////
-
 
 // function to train the neural network using using a preloaded network and a training file
 // takes in a neural network, a loaded data set, epochs, learning rate and a file to save the model to
 // Models are saved to a file after training is complete
 // assumes one output neuron
 double train_network(struct neural_net *net, struct data_set *data, int epochs, double learning_rate, char *filename){
-    int i;
     double error;
-    for(i = 0; i < epochs; i++){
+
+    for (int i = 0; i < epochs; i++){
         error = 0;
         for (int j = 0; j < data->move_num; j++){
             populate_input(net, data->game_data[j].p1, data->game_data[j].p2, data->game_data[j].p1k, data->game_data[j].p2k);
             forward_propagate(net);
             back_propagate(net, learning_rate, &data->game_data[j].true_eval);
-            error += net->layers[net->num_layers - 1].neurons[0].error;
+            error += error_relu_out(net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
 
         }
         error = error / data->move_num;
-        printf("Epoch %d: %f\n", i, error);
     }
     save_network_to_file(net, filename);
     return error;
@@ -101,7 +144,13 @@ double test_network(struct neural_net *net, struct data_set *data){
         populate_input(net, data->game_data[j].p1, data->game_data[j].p2, data->game_data[j].p1k, data->game_data[j].p2k);
         forward_propagate(net);
         // calculate the error
-        error += error_tanh_out(net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
+        error += error_relu_out(net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
+        
+        // print the output vs the expected output
+        printf("%f %f\n", net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
+
+        //print the expected and the actual
+        //printf("actual: %f output: %f\n", data->game_data[j].true_eval, net->layers[net->num_layers - 1].neurons[0].output);
     }
 
     return error / data->move_num;
@@ -199,11 +248,19 @@ void test_backpropagation(){
 }
 
 
-
 int main(){
-    return 1;
+
+    return 0;
+
     //test_basic_functions();
-    test_backpropagation();
+    //test_backpropagation();
+
+    // create a fresh neural network
+    struct neural_net *net = generate_new_network(32, 1, 5, 32);
+    // save the network
+    save_network_to_file(net, "neural_net/test_network");
+
+    free(net);
 
     return 1;
 }
