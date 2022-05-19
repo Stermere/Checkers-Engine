@@ -101,6 +101,9 @@ struct data_set* load_data_set_from_file(char *filename){
 
     // close the file
     fclose(file);
+
+    // return the data set
+    return data;
 }
 
 // function to load the neural network from a file
@@ -237,10 +240,10 @@ struct neural_net* generate_new_network(int num_inputs, int num_outputs, int num
             net->layers[i].neurons[j].output = 0;
             for (int k = 0; k < temp_last_layer_size; k++){
                 // generate random weights between -1 and 1 that will not be too close to 0
-                net->layers[i].neurons[j].weights[k] = ((rand() / (double)RAND_MAX)) - .5;
+                net->layers[i].neurons[j].weights[k] = ((rand() / (double)RAND_MAX));
                 // if the weight is 0 then offset it by 0.1
                 if (net->layers[i].neurons[j].weights[k] == 0){
-                    net->layers[i].neurons[j].weights[k] += 0.1;
+                    net->layers[i].neurons[j].weights[k] += 0.001;
                 }
            }
         }
