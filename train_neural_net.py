@@ -6,7 +6,6 @@
 # note: this will use alot of RAM and cpu power so make sure you have enough
 
 # imports
-from cmath import log10
 from random import randint
 import sys
 import os
@@ -18,6 +17,7 @@ import multiprocessing as mp
 # import the search engine
 sys.path.insert(0, os.getcwd() + "/build/lib.win-amd64-3.9/")
 import search_engine
+import checkers_NN
 
 
 # function to turn a game in to the file type needed for training
@@ -31,13 +31,13 @@ def game_to_file(game, file_name = "game_data.ds"):
     for i in range(len(game) - 2):
         # calculate the true eval at this point
         if game[-1] == 1:
-            eval_ = 1
-            eval_ = eval_ - ((1 / game[-2]) * (game[-2] - (i + 1)))
+            eval_ = 100
+            eval_ = eval_ - ((50 / game[-2]) * (game[-2] - (i + 1)))
         elif game[-1] == 2:
-            eval_ = -1
-            eval_ = eval_ + ((1 / game[-2]) * (game[-2] - (i + 1)))
-        else:
             eval_ = 0
+            eval_ = eval_ + ((50 / game[-2]) * (game[-2] - (i + 1)))
+        else:
+            eval_ = 50
 
         # write the game data to the file
         file.write(f"{game[i][0]} {game[i][1]} {game[i][2]} {game[i][3]} {eval_}\n")
@@ -45,12 +45,24 @@ def game_to_file(game, file_name = "game_data.ds"):
     file.close()
 
 
+# function to train the neural network
+def train_neural_net(neural_net_file, data_set_file, epochs, learning_rate):
+    error = checkers_NN.train_net(neural_net_file, data_set_file, epochs, learning_rate)
+
+    # print the error
+    #print("error: " + str(error))
+    
+def test_neural_net(neural_net_file, data_set_file):
+    error = checkers_NN.test_net(neural_net_file, data_set_file)
+    print("error: " + str(error))
+    return error
+
 # plays one game engine vs engine and returns the game data
 # first 3 moves are random to allow the bot to learn from the game
 def play_game():
     # create a board
     board = Board()
-    search_time = 2.5
+    search_time = .5
     # create a list to store the game data
     game = []
     num_moves = 0
@@ -71,8 +83,8 @@ def play_game():
         # convert the board to a bitboard
         p1, p2, p1k, p2k = convert_to_bitboard(board.board)
 
-        # since we want the first three moves random we check if the game is less than 3 moves
-        if num_moves <= 3:
+        # since we want the first six moves random we check if the game is less than six moves
+        if num_moves <= 6:
             # if it is we generate a random move
             moves = generate_all_options(board.board, player, False)
             # generate a random move
@@ -117,23 +129,49 @@ def play_game():
     return game
 
 
+
 # main function
 def main():
     # generate a game data file by playing a game
-    #for i in range(1000):
-    #    game = play_game()
-    #    game_to_file(game, "data_set/pre/pre_training_data" + str(i) + ".ds")
-#
+    for i in range(50):
+        game = play_game()
+        game_to_file(game, "data_set/old_eval/pre_training_data" + str(i) + ".ds")
+    exit()
+
     # for playing one game
     #game = play_game()
     # convert the game data to a file
     #game_to_file(game)
     #print("Data generated! exiting...")
 
+    # test the neural network 
+    error_start = 0
+    for i in range (60, 100):
+        error_start += abs(test_neural_net("neural_net/test_network", ("data_set/pre/pre_training_data" + str(i))))
+
     # train the neural network using the data set
-    print("Training the neural network...")
+    print("training neural network...")
+    for t in range(0, 1):
+        for i in range (0, 60):
+            train_neural_net("neural_net/test_network", ("data_set/pre/pre_training_data" + str(i)), 1, 0.01)
+
+    # test the neural network 
+    error_end = 0
+    for i in range (60, 100):
+        error_end += abs(test_neural_net("neural_net/test_network", ("data_set/pre/pre_training_data" + str(i))))
+
+    # test the neural network 
+    error_end_training = 0
+    for i in range (60, 100):
+        error_end_training += abs(test_neural_net("neural_net/test_network", ("data_set/pre/pre_training_data" + str(i))))
+
+    print("\n")
+    print("error before training: " + str(error_start / 1))
+    print("error after training: " + str(error_end / 1))
+    print("error on training data: " + str(error_end_training / 1))
+
     
-    
+
 
 # call the main function
 if __name__ == "__main__":
