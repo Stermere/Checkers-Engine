@@ -6,7 +6,8 @@
 # note: this will use alot of RAM and cpu power so make sure you have enough
 
 # imports
-from random import randint
+from random import randint, shuffle
+from copy import deepcopy 
 import sys
 import os
 from time import process_time
@@ -28,16 +29,22 @@ def game_to_file(game, file_name = "game_data.ds"):
     file = open(file_name, "w")
     # write the game data to the file
     file.write(f"{game[-1]} {game[-2]}\n")
-    for i in range(len(game) - 2):
+    num_moves = game[-2]
+    game_winner = game[-1]
+    # randomize the order of the moves
+    game = deepcopy(game[:-2])
+    
+
+    for i in range(len(game)):
         # calculate the true eval at this point
-        if game[-1] == 1:
-            eval_ = 100
-            eval_ = eval_ - ((50 / game[-2]) * (game[-2] - (i + 1)))
-        elif game[-1] == 2:
+        if game_winner == 1:
+            eval_ = 10
+            eval_ = eval_ - ((5 / num_moves) * (num_moves - (i + 1)))
+        elif game_winner == 2:
             eval_ = 0
-            eval_ = eval_ + ((50 / game[-2]) * (game[-2] - (i + 1)))
+            eval_ = eval_ + ((5 / num_moves) * (num_moves - (i + 1)))
         else:
-            eval_ = 50
+            eval_ = 5
 
         # write the game data to the file
         file.write(f"{game[i][0]} {game[i][1]} {game[i][2]} {game[i][3]} {eval_}\n")
@@ -51,14 +58,14 @@ def train_neural_net(neural_net_file, data_set_file, epochs, learning_rate):
 
     # print the error
     #print("error: " + str(error))
+    return error;
     
 def test_neural_net(neural_net_file, data_set_file):
     error = checkers_NN.test_net(neural_net_file, data_set_file)
-    print("error: " + str(error))
     return error
 
 # plays one game engine vs engine and returns the game data
-# first 3 moves are random to allow the bot to learn from the game
+# first 4 moves are random to allow the bot to learn from the game
 def play_game():
     # create a board
     board = Board()
@@ -83,15 +90,14 @@ def play_game():
         # convert the board to a bitboard
         p1, p2, p1k, p2k = convert_to_bitboard(board.board)
 
-        # since we want the first six moves random we check if the game is less than six moves
-        if num_moves <= 6:
+        if num_moves <= 4:
             # if it is we generate a random move
             moves = generate_all_options(board.board, player, False)
             # generate a random move
             best_move = randint(0, len(moves) - 1)
             best_move = moves[best_move]
         
-        # if the game is more than 3 moves we use the search engine to find the best move
+        # if the game is more than 4 moves we use the search engine to find the best move
         else:
             # get the best move
             best_move = search_engine.search_position(p1, p2, p1k, p2k, player, search_time, 25)
@@ -129,14 +135,71 @@ def play_game():
     return game
 
 
+def conv_gamefiles_to_ds(game_file, data_set_file, num_files):
+    # make a training and testing file
+    train_file = open(data_set_file + "_train.ds", "w")
+    test_file = open(data_set_file + "_test.ds", "w")
+    test_list = []
+    train_list = []
+
+    file_list = []
+    for i in range(num_files):
+        file_list.append(open(game_file + str(i) + ".ds", "r"))
+
+    # get the total number of moves in each file
+    num_moves = []
+    for i in range(num_files):
+        num_moves.append(int(file_list[i].readline().split()[-1]))
+
+    train_moves = 0
+    test_moves = 0
+    # write every fourth move to the test file
+    for i in range(num_files):
+        # loop for the number of moves in the file
+        for j in range(num_moves[i]):
+            # if the move is the fourth move then write it to the test file
+            if j % 4 == 3:
+                test_list.append(file_list[i].readline())
+                test_moves += 1
+            # if the move is not the fourth move then write it to the train file
+            else:
+                train_list.append(file_list[i].readline())
+                train_moves += 1
+
+    # now the number of moves is known write the number of moves to the file
+    train_file.write(f"0 {train_moves}\n")
+    test_file.write(f"0 {test_moves}\n")
+
+    # write the training data to the file
+    for i in range(len(train_list)):
+        train_file.write(train_list[i])
+
+    # write the testing data to the file
+    for i in range(len(test_list)):
+        test_file.write(test_list[i])
+
+    # close the files
+    train_file.close()
+    test_file.close()
+
+    # for each file in the list
+    for i in range(num_files):
+        # close the file
+        file_list[i].close()
+
+
+
 
 # main function
 def main():
     # generate a game data file by playing a game
-    for i in range(50):
-        game = play_game()
-        game_to_file(game, "data_set/old_eval/pre_training_data" + str(i) + ".ds")
-    exit()
+    #for i in range(500):
+    #    while True:
+    #        game = play_game()
+    #        if game[-1] != 0:
+    #            break
+    #    game_to_file(game, "data_set/old_eval/pre_training_data" + str(i) + ".ds")
+    #exit()
 
     # for playing one game
     #game = play_game()
@@ -144,31 +207,43 @@ def main():
     #game_to_file(game)
     #print("Data generated! exiting...")
 
+    # write the games to a training and testing file
+    #conv_gamefiles_to_ds("data_set/old_eval/pre_training_data", "data_set/pre_training", 200)
+    #exit(1)
+
+    test_size = 50
+    train_size = 150
+
+    test_range = range(150, 200)
+    train_range = range(0, 150)
+
     # test the neural network 
     error_start = 0
-    for i in range (60, 100):
-        error_start += abs(test_neural_net("neural_net/test_network", ("data_set/pre/pre_training_data" + str(i))))
+    for i in test_range:
+        error_start += abs(test_neural_net("neural_net/test_network", ("data_set/old_eval/pre_training_data" + str(i))))
+
 
     # train the neural network using the data set
     print("training neural network...")
-    for t in range(0, 1):
-        for i in range (0, 60):
-            train_neural_net("neural_net/test_network", ("data_set/pre/pre_training_data" + str(i)), 1, 0.01)
+    for i in range(10):
+        for i in train_range:
+            train_neural_net("neural_net/test_network", ("data_set/old_eval/pre_training_data" + str(i)), 1, 0.001)
+        
 
-    # test the neural network 
+    # test the neural network on the test data set
     error_end = 0
-    for i in range (60, 100):
-        error_end += abs(test_neural_net("neural_net/test_network", ("data_set/pre/pre_training_data" + str(i))))
+    for i in test_range:
+        error_end += abs(test_neural_net("neural_net/test_network", ("data_set/old_eval/pre_training_data" + str(i))))
 
-    # test the neural network 
+    # test the neural network on the training data set
     error_end_training = 0
-    for i in range (60, 100):
-        error_end_training += abs(test_neural_net("neural_net/test_network", ("data_set/pre/pre_training_data" + str(i))))
+    for i in train_range:
+        error_end_training += abs(test_neural_net("neural_net/test_network", ("data_set/old_eval/pre_training_data" + str(i))))
 
-    print("\n")
-    print("error before training: " + str(error_start / 1))
-    print("error after training: " + str(error_end / 1))
-    print("error on training data: " + str(error_end_training / 1))
+    print()
+    print("error test_init: " + str(error_start / test_size))
+    print("error test_end: " + str(error_end / test_size))
+    print("error train_end: " + str(error_end_training / train_size))
 
     
 
