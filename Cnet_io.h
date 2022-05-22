@@ -137,12 +137,8 @@ struct neural_net* load_network_from_file(char *filename){
     // this isnt the most efficient way to do this but it works and its not too bad
     struct neural_net *net = generate_new_network(num_inputs, num_outputs, num_layers, num_neurons_hidden);
 
-    // read the weights and biases and put them in the network
-    // first read the first layer since it is only for inputs
-    for (int i = 0; i < net->layers[0].num_neurons; i++){
-        fscanf(file, "%lf", &net->layers[0].neurons[i].bias);
-    }
-    // then read the hidden layers
+
+    // since the first layer is just the inputs, we dont need to read it (it also doesnt exist in the file)
     for (int i = 1; i < net->num_layers - 1; i++){
         for (int j = 0; j < net->layers[i].num_neurons; j++){
             for (int k = 0; k < net->layers[i-1].num_neurons; k++){
@@ -186,8 +182,8 @@ void save_network_to_file(struct neural_net *net, char *filename){
     }
 
     fprintf(file, "%d %d %d %d\n", net->num_inputs, net->num_outputs, net->num_layers, net->layers[1].num_neurons);
-    // now in order of layers from input to output save the weights and biases for each layer
-    for (int i = 0; i < net->num_layers; i++){
+    // now in order of layers from input to output save the weights and biases for each layer (except the first its weights are usless)
+    for (int i = 1; i < net->num_layers; i++){
         for (int j = 0; j < net->layers[i].num_neurons; j++){
             for (int k = 0; k < net->layers[i].neurons[j].prev_layer_neurons_num; k++){
                 fprintf(file, "%f ", net->layers[i].neurons[j].weights[k]);
@@ -268,3 +264,9 @@ void print_network_to_stdio(struct neural_net *net){
     }
 }
 
+void print_data_to_stdio(struct data_set *data){
+    printf("Data:\n");
+    for (int i = 0; i < data->move_num; i++){
+        printf("\tInput %d: %f\n", i, data->game_data[i].true_eval);
+    }
+}
