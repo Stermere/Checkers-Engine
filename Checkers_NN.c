@@ -10,10 +10,7 @@
 double train_network(struct neural_net *net, struct data_set *data, int epochs, double learning_rate, char *filename);
 double test_network(struct neural_net *net, struct data_set *data);
 
-
-
 // python wrapper for train_network and test_network
-////////////////////////////////////////////
 
 // train the neural network
 static PyObject* train_net(PyObject *self, PyObject *args){
@@ -49,6 +46,12 @@ static PyObject* train_net(PyObject *self, PyObject *args){
 
     save_network_to_file(net, net_file);
 
+
+    free(net);
+    free(data);
+    free(net_buf);
+    free(train_buf);
+
     // return the error
     return Py_BuildValue("d", error);
 }
@@ -81,6 +84,10 @@ static PyObject* test_net(PyObject *self, PyObject *args){
 
     error = test_network(net, data);
 
+
+    free(net);
+    free(data);
+
     // return the error
     return Py_BuildValue("d", error);
     
@@ -110,8 +117,6 @@ PyInit_checkers_NN(void){
     return PyModule_Create(&checkers_NN);
 }
 
-////////////////////////////////////////////
-
 // function to train the neural network using using a preloaded network and a training file
 // takes in a neural network, a loaded data set, epochs, learning rate and a file to save the model to
 // Models are saved to a file after training is complete
@@ -127,6 +132,8 @@ double train_network(struct neural_net *net, struct data_set *data, int epochs, 
             back_propagate(net, learning_rate, &data->game_data[j].true_eval);
             error += error_relu_out(net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
 
+            // print the output vs the true output
+            printf("%f %f\n", net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
         }
         error = error / data->move_num;
     }
@@ -146,16 +153,16 @@ double test_network(struct neural_net *net, struct data_set *data){
         // calculate the error
         error += error_relu_out(net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
         
-        // print the output vs the expected output
+        // print the output vs the true value
         printf("%f %f\n", net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
 
-        //print the expected and the actual
-        //printf("actual: %f output: %f\n", data->game_data[j].true_eval, net->layers[net->num_layers - 1].neurons[0].output);
+
     }
-
     return error / data->move_num;
-
 }
+
+// start of temperary test code
+////////////////////////////////////////////////////////////////////
 
 
 // function to verify the workings of the program structure
