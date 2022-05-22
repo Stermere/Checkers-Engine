@@ -502,6 +502,7 @@ unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong 
 // takes the board and a memory location to save to as arguments
 // returns the number of moves generated
 // note: moves should have room for 96 elements as this is the maximum number of moves possible on a legal board
+// TODO return the total number of moves regardless of whether it is a capture or not
 int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, int* moves, struct set* piece_loc, int* offsets, int jump){
     // setup variables
     int num_moves = 0;
@@ -591,6 +592,7 @@ int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, in
             }
             new_pos = new_pos + number_offsets[i];
             temp_pos_type = get_piece_at_location(p1, p2, p1k, p2k, new_pos);
+
             if (temp_pos_type == 0){
                 // if a jump was found and the jump flag was not set, return -1
                 if (!only_jump){
