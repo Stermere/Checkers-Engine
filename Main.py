@@ -20,7 +20,7 @@ def start_search(board : list, player : int, p_time : int, return_dict):
     p1, p2, p1k, p2k = convert_to_bitboard(board)
     # a depth of 25 is not likly to be hit by the search at the time of writing but if we do hit it
     # we will need to increase the depth here
-    p_depth = 25;
+    p_depth = 50;
     results = search_engine.search_position(p1, p2, p1k, p2k, player, p_time, p_depth)
 
     # update the return dict (stops montycarlo if a search is terminated before the time constraint)
