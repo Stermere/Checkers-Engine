@@ -86,7 +86,7 @@ int check_for_entry(struct hash_table_entry* entry_index, unsigned long long int
 // also return NAN if the age of the entry is older than the current age
 float get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth, int player){
     struct hash_table_entry* entry_index = table->table + (hash % table->size);
-    if (entry_index->hash == hash && entry_index->age == age && entry_index->depth == depth && entry_index->player == player){
+    if (entry_index->hash == hash && entry_index->age == age && entry_index->depth <= depth && entry_index->player == player){
         return entry_index->eval;
     }
     else{
