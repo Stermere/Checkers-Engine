@@ -126,14 +126,14 @@ double train_network(struct neural_net *net, struct data_set *data, int epochs, 
 
     for (int i = 0; i < epochs; i++){
         error = 0;
+        // shuffle the data set
+        shuffle_data_set(data);
         for (int j = 0; j < data->move_num; j++){
             populate_input(net, data->game_data[j].p1, data->game_data[j].p2, data->game_data[j].p1k, data->game_data[j].p2k);
             forward_propagate(net);
             back_propagate(net, learning_rate, &data->game_data[j].true_eval);
-            error += error_relu_out(net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
+            error += abs(error_relu_out(net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval));
 
-            // print the output vs the true output
-            printf("%f %f\n", net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
         }
         error = error / data->move_num;
     }
@@ -146,15 +146,16 @@ double train_network(struct neural_net *net, struct data_set *data, int epochs, 
 // returns the error rate
 double test_network(struct neural_net *net, struct data_set *data){
     double error;
+
+    // shuffle the data set
+    shuffle_data_set(data);
     error = 0;
+    
     for (int j = 0; j < data->move_num; j++){
         populate_input(net, data->game_data[j].p1, data->game_data[j].p2, data->game_data[j].p1k, data->game_data[j].p2k);
         forward_propagate(net);
         // calculate the error
-        error += error_relu_out(net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
-        
-        // print the output vs the true value
-        printf("%f %f\n", net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval);
+        error += abs(error_relu_out(net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval));
 
 
     }
