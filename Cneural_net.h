@@ -52,19 +52,19 @@ void populate_input(struct neural_net *net, long long int p1, long long int p2, 
     for (int i = 0; i < num_loops; i++){
         shift_amount = shift_map[i];
         if (p1 >> shift_amount & 1 == 1){
-            input_value = 3.0;
+            input_value = 7.5;
         }
         else if (p2 >> shift_amount & 1 == 1){
-            input_value = 2.0;
+            input_value = 2.5;
         }
         else if (p1k >> shift_amount & 1 == 1){
-            input_value = 4.0;
+            input_value = 10.0;
         }
         else if (p2k >> shift_amount & 1 == 1){
-            input_value = 1.0;
+            input_value = 0.0;
         }
         else{
-            input_value = 0.0;
+            input_value = 5.0;
         }
 
         input_layer->neurons[i].output = input_value;
