@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "Cset.h"
 #include "Chash_table.h"
+#include "Cneural_net.h"
 
 // define some functions
 float* compute_piece_pos();
@@ -19,6 +20,7 @@ struct board_evaler{
     float *king_pos_map;
     long long int boards_evaluated;
     int search_depth;
+    struct neural_net *NN_evaler;
     struct hash_table* hash_table;
 };
 
@@ -27,7 +29,7 @@ struct board_evaler* board_evaler_constructor(void){
     evaler->piece_pos_map = compute_piece_pos();
     evaler->king_pos_map = compute_king_pos();
     evaler->boards_evaluated = 0ll;
-
+    evaler->NN_evaler = load_network_from_file("neural_net/neural_net");
     // prepare a table of size 8,388,608 
     long long int hash_table_size = 1 << 23;
     evaler->hash_table = init_hash_table(hash_table_size);
@@ -38,13 +40,18 @@ struct board_evaler* board_evaler_constructor(void){
 // get the board evaluation from the hash table or if not there, calculate it and put it in the hash table
 // hash table is not yet implimented
 float get_eval(long long p1, long long p2, long long p1k, long long p2k, struct set* piece_loc, struct board_evaler* evaler, int depth, long long int hash, int depth_abs, int player){
-    return calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
+    //return calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
 
     // see if the hash is in the table
     float eval = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs, player);
     if (isnan(eval)){
-        // if it is not calculate it and store it in the table
-        eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
+        // there was no entry found so lets calculate it
+        //eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
+
+        // test neural net
+        eval = (float)get_output(evaler->NN_evaler, p1, p2, p1k, p2k); // neural_net
+
+        // store the eval for future use
         add_hash_entry(evaler->hash_table, hash, eval, depth_abs, evaler->search_depth, player);
     }
 
@@ -57,28 +64,41 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
     float eval = 0;
     int piece_loc_array[64];
     int num_pieces = populate_array(piece_loc, piece_loc_array);
+    int p1num = 0;
+    int p2num = 0;
     for (int i = 0; i < num_pieces; i++){
         if (p1 >> piece_loc_array[i] & 1){
             eval += 3.0;
             eval += evaluate_pos(0, piece_loc_array[i], evaler);
+            p1num++;
 
         }
         else if (p2 >> piece_loc_array[i] & 1){
             eval -= 3.0;
             eval -= evaluate_pos(0, piece_loc_array[i], evaler);
+            p2num++;
             
         }
         else if (p1k >> piece_loc_array[i] & 1){
             eval += 5.0;
             eval += evaluate_pos(1, piece_loc_array[i], evaler);
+            p1num++;
 
         }
         else if (p2k >> piece_loc_array[i] & 1){
             eval -= 5.0;
             eval -= evaluate_pos(1, piece_loc_array[i], evaler);
-
+            p2num++;
         }
     }
+    // give the player with the most pieces a bonus
+    if (p1num > p2num){
+        eval += 4.0 / (p1num + p2num);
+    }
+    else if (p2num > p1num){
+        eval -= 4.0 / (p1num + p2num);
+    }
+
     return eval;
 }
 
