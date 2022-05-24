@@ -39,17 +39,30 @@ struct neuron {
 struct data_set{
     int endgame_state;
     int move_num;
-    struct board_data *game_data;
+    struct data_entry *game_data;
 };
 
 // hold a boad state and eval
-struct board_data{
+struct data_entry{
     double true_eval;
     long long int p1;
     long long int p2;
     long long int p1k;
     long long int p2k;
 };
+
+// randomly shuffle the data set
+void shuffle_data_set(struct data_set *data){
+    srand(time(NULL));
+    int i, j;
+    struct data_entry temp;
+    for (i = data->move_num - 1; i > 0; i--){
+        j = rand() % (i + 1);
+        temp = data->game_data[i];
+        data->game_data[i] = data->game_data[j];
+        data->game_data[j] = temp;
+    }
+}
 
 // function to save the data set to a file
 void save_data_set_to_file(struct data_set *data, char *filename){
@@ -90,7 +103,7 @@ struct data_set* load_data_set_from_file(char *filename){
     struct data_set *data = malloc(sizeof(struct data_set));
     fscanf(file, "%d", &data->endgame_state);
     fscanf(file, "%d", &data->move_num);
-    data->game_data = malloc(sizeof(struct board_data) * data->move_num);
+    data->game_data = malloc(sizeof(struct data_entry) * data->move_num);
     for (int i = 0; i < data->move_num; i++){
         fscanf(file, "%lld", &data->game_data[i].p1);
         fscanf(file, "%lld", &data->game_data[i].p2);
