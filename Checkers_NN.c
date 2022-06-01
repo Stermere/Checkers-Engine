@@ -84,7 +84,6 @@ static PyObject* test_net(PyObject *self, PyObject *args){
 
     error = test_network(net, data);
 
-
     free(net);
     free(data);
 
@@ -93,12 +92,49 @@ static PyObject* test_net(PyObject *self, PyObject *args){
     
 }
 
+// function to initialize a fresh neural network
+static PyObject* init_net(PyObject *self, PyObject *args){
+
+    int num_inputs;
+    int num_layers;
+    int num_outputs;
+    int hidden_size;
+
+    char file_arr[50];
+
+    char* save_file = &file_arr[0];
+
+    Py_buffer* file_buf = (Py_buffer*)malloc(sizeof(Py_buffer));
+
+    // get the arguments from python
+    if (!PyArg_ParseTuple(args, "iiiis*", &num_inputs, &num_layers, &num_outputs, &hidden_size, file_buf)){
+        return NULL;
+    }
+
+    // copy the buffer to a string
+    strcpy(save_file, file_buf->buf);
+
+    // initialize the network
+    struct neural_net* net = generate_new_network(num_inputs, num_outputs, num_layers, hidden_size);
+
+    save_network_to_file(net, save_file);
+
+    free(net);
+    free(file_buf);
+
+    // return the network
+    return Py_BuildValue("i", 1);
+}
+
+
 // tell the pyhton interpreter about the functions we want to use
 static PyMethodDef c_neural_net[] = {
     {"train_net", train_net, METH_VARARGS, 
     "train the neural network"},
     {"test_net", test_net, METH_VARARGS,
     "test the neural network"},
+    {"init_net", init_net, METH_VARARGS,
+    "initialize a fresh neural network"},
     {NULL, NULL, 0, NULL}
 };
 
