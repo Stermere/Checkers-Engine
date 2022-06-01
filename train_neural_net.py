@@ -6,7 +6,6 @@
 # note: this will use alot of RAM and cpu power so make sure you have enough
 
 # imports
-from imp import new_module
 from random import randint, shuffle
 from copy import deepcopy 
 import sys
@@ -70,7 +69,7 @@ def test_neural_net(neural_net_file, data_set_file):
 def play_game(save_list):
     # create a board
     board = Board()
-    search_time = 1
+    search_time = 4
     # create a list to store the game data
     game = []
     num_moves = 0
@@ -120,12 +119,16 @@ def play_game(save_list):
         # see if the game is over
         win = check_win(board.board, player)
         tie = check_tie(game)
+        # also check if the length of the game is greater than 200 if so call it a tie
+        if num_moves > 200:
+            tie = True
         if win == 1:
             final_state = 1
         elif win == 2:
             final_state = 2
         elif tie:
             final_state = 0
+
 
     # add the final state, and the number of moves to the game data
     game.append(num_moves)
@@ -197,6 +200,41 @@ def conv_gamefiles_to_ds(game_file, data_set_file, num_files, make_testingset = 
         # close the file
         file_list[i].close()
 
+# play a number of games and save the game data to a file (for bulk data creation)
+def play_n_games(n):
+    # play 8 games at a time and save the data to a file
+    manager = mp.Manager()
+    
+    # variable to store the index of the file being written to
+    file_index = 0
+
+    for i in range(n // 8):
+        # create a list to store the game data
+        save_list = manager.list()
+        # create a list of processes
+        processes = []
+
+        # play 8 games
+        for j in range(8):
+            # create a process to play the game
+            p = mp.Process(target=play_game, args=(save_list,))
+            # start the process
+            p.start()
+            # add the process to the list
+            processes.append(p)
+
+        # wait for all the processes to finish
+        for p in processes:
+            p.join()
+            
+        # save the game data to a file
+        for j in range(len(save_list)):
+            # ties can confuse the network and cause overfiting so we remove them
+            if save_list[j][-1] != 0:
+                continue
+            game_to_file(save_list[j], "data_set/old_eval/pre_training_data" + str(file_index) + ".ds")
+            file_index += 1
+
 
 # function to allow the bot to play against itself and continusly train the neural network
 def unsupervised_training(neural_net_file, data_set_file, epochs, learning_rate):
@@ -210,19 +248,19 @@ def unsupervised_training(neural_net_file, data_set_file, epochs, learning_rate)
     # we want 10 games per batch of training (only include two tie game) and 4 games of test data every 4 batches
     while True:
         games = []
-        # prepare 4 processes to play the games
+        # prepare 8 processes to play the games
         game_list = manager.list()
-        for i in range(4):
+        for i in range(8):
             p = mp.Process(target=play_game, args=(game_list,))
             p.start()
             games.append(p)
 
         # wait for the processes to finish
-        for i in range(4):
+        for i in range(8):
             games[i].join()
         
         # check the outcome of the game and add it to the list if it the kind we want
-        for i in range(4):
+        for i in range(8):
             game = game_list[i]
             if game[-1] == 1 and p1_win < 4:
                 p1_win += 1
@@ -233,28 +271,26 @@ def unsupervised_training(neural_net_file, data_set_file, epochs, learning_rate)
             elif game[-1] == 0 and tie < 2:
                 tie += 1
                 training_list.append(game)
+            if p1_win + p2_win + tie == 10:
+                break
 
         # if we have enough games to train on then train the neural network
-        if len(training_list) >= 10:
+        if (p1_win + p2_win + tie) >= 10:
             # first write the training data to game files
-            temp_file = "temp"
-            for i in range(len(game_list)):
-                game_to_file(training_list[i], temp_file + str(i))
+            temp_file = "data_set/temp/temp"
+            for i in range(len(training_list)):
+                game_to_file(training_list[i], temp_file + str(i) + ".ds")
 
             # now convert the game files to a data set
             conv_gamefiles_to_ds(temp_file, data_set_file, len(training_list))
 
             # now test the neural network on the data set
-            error_end = abs(test_neural_net(neural_net_file, data_set_file))
+            error_end = abs(test_neural_net(neural_net_file, data_set_file + "_train"))
 
             print(f"Error: {error_end}\n")
 
-            # if the error is less than 0.1 then we can stop training
-            if error_end < 0.1:
-                break
-
             print("training neural network...")
-            train_neural_net(neural_net_file, data_set_file, epochs, learning_rate)
+            train_neural_net(neural_net_file, data_set_file + "_train", epochs, learning_rate)
 
             # now reset the game list and the number of games
             training_list = []
@@ -265,6 +301,7 @@ def unsupervised_training(neural_net_file, data_set_file, epochs, learning_rate)
             # append the error to a file so we can see how it is changing
             with open("error.txt", "a") as f:
                 f.write(f"{error_end}\n")
+                f.close()
 
 
 # main function
@@ -288,17 +325,25 @@ def main():
     #conv_gamefiles_to_ds("data_set/old_eval/pre_training_data", "data_set/pre_training", 200, True)
     #exit(1)
 
+
+    #train_neural_net("neural_net/test_network", "data_set/pre_training_train", 32, 0.1)
+    #exit(1)
+
     # train the neural network on itself
-    unsupervised_training("neural_net/neural_net.nn", "data_set/self_play_data/game_data", 10, 0.1)
-    print("training sucessful exiting...")
-    exit(1)
+    #unsupervised_training("neural_net/neural_net", "data_set/self_play_data/game_data", 100, 0.01)
+    #print("training sucessful exiting...")
+    #exit(1)
+
+    # play a number of games and save the game data to a file (for bulk data creation)
+    play_n_games(100000)
+    exit(0)
 
     # test the neural network 
     error_start = abs(test_neural_net("neural_net/test_network", "data_set/pre_training_test"))
 
     # train the neural network using the data set
     print("training neural network...")
-    train_neural_net("neural_net/test_network", "data_set/pre_training_train", 50, 0.1)
+    train_neural_net("neural_net/test_network", "data_set/pre_training_train", 300, 0.01)
         
 
     # test the neural network on the test data set
