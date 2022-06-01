@@ -29,7 +29,7 @@ struct board_evaler* board_evaler_constructor(void){
     evaler->piece_pos_map = compute_piece_pos();
     evaler->king_pos_map = compute_king_pos();
     evaler->boards_evaluated = 0ll;
-    evaler->NN_evaler = load_network_from_file("neural_net/neural_net");
+    evaler->NN_evaler = load_network_from_file("neural_net/test_network");
     // prepare a table of size 8,388,608 
     long long int hash_table_size = 1 << 23;
     evaler->hash_table = init_hash_table(hash_table_size);
@@ -46,10 +46,10 @@ float get_eval(long long p1, long long p2, long long p1k, long long p2k, struct 
     float eval = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs, player);
     if (isnan(eval)){
         // there was no entry found so lets calculate it
-        //eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
+        eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
 
         // test neural net
-        eval = (float)get_output(evaler->NN_evaler, p1, p2, p1k, p2k); // neural_net
+        //eval = (float)get_output(evaler->NN_evaler, p1, p2, p1k, p2k); // neural_net
 
         // store the eval for future use
         add_hash_entry(evaler->hash_table, hash, eval, depth_abs, evaler->search_depth, player);
