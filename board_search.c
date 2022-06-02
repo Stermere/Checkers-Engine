@@ -778,7 +778,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     struct set* piece_loc = get_piece_locations(p1, p2, p1k, p2k);
     // the tree will be stored in a linked list of best_move structs (populated during search)
     struct board_data* best_moves = board_data_constructor(player, -1, -1);
-    struct board_evaler* evaler = board_evaler_constructor(); 
+    struct board_evaler* evaler = board_evaler_constructor(search_depth); 
     // get the starting hash
     intLong hash = get_hash(p1, p2, p1k, p2k, evaler->hash_table);
     float eval_;
