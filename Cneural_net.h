@@ -126,7 +126,7 @@ void forward_propagate(struct neural_net *net){
     for (int i = 1; i < num_layers; i++){
         // loop throught the neurons in the layer
         // also compute 1/total_weights
-        int num_neurons = last_layer->num_neurons;
+        int num_neurons = current_layer->num_neurons;
         double squish_val = 1.0 / (double)num_neurons;
         for (int j = 0; j < num_neurons; j++){
             activation(current_layer->neurons + j, last_layer, squish_val);
