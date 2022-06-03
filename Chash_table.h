@@ -61,6 +61,12 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, float
             return;
             }
     }
+    // if the eval is a mate score, dont save it in the table
+    if (eval < -899.0 || eval > 899.0){
+        return;
+    }
+
+
     // if the entry is empty or the value stored is deamed less relevant add the new entry at the old entrys location
     entry_index->hash = hash;
     entry_index->eval = eval;
@@ -99,7 +105,7 @@ float get_hash_entry(struct hash_table *table, unsigned long long int hash, int 
 // note: youger ages are actually larger numbers since age == search_depth the node was added to the table at
 int compare_hash_entries(struct hash_table_entry *entry1, int depth, int age){
     // we always want to keep entrys that are younger as they are more relevant
-    if(entry1->age >= age){
+    if(entry1->age == age){
         // less deep entrys store more work but are also less likly to be found again so
         // decide which one to keep is not trivial, for now we will keep the one with the lower depth
         if (entry1->depth <= depth){
@@ -144,7 +150,7 @@ unsigned long long int* compute_piece_hash_diffs(){
     return piece_hash_diffs;
 }
 
-// sudo random number generator
+// sudo random 64 bit number generator
 long long int rand_num(){
     return (((unsigned long long int)rand() << 48) | ((unsigned long long int)rand() << 32) | ((unsigned long long int)rand() << 16) | (unsigned long long int)rand());
 }
