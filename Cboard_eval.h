@@ -5,6 +5,7 @@
 #include "Cset.h"
 #include "Chash_table.h"
 #include "Cneural_net.h"
+#include "Ckiller_table.h"
 
 // define some functions
 float* compute_piece_pos();
@@ -22,17 +23,19 @@ struct board_evaler{
     int search_depth;
     struct neural_net *NN_evaler;
     struct hash_table* hash_table;
+    struct killer_table* killer_table;
 };
 
-struct board_evaler* board_evaler_constructor(void){
+struct board_evaler* board_evaler_constructor(int search_depth){
     struct board_evaler* evaler = (struct board_evaler*)malloc(sizeof(struct board_evaler));
     evaler->piece_pos_map = compute_piece_pos();
     evaler->king_pos_map = compute_king_pos();
     evaler->boards_evaluated = 0ll;
-    evaler->NN_evaler = load_network_from_file("neural_net/test_network");
+    evaler->NN_evaler = load_network_from_file("neural_net/neural_net");
     // prepare a table of size 8,388,608 
     long long int hash_table_size = 1 << 23;
     evaler->hash_table = init_hash_table(hash_table_size);
+    evaler->killer_table = init_killer_table(search_depth);
 
     return evaler;
 }
@@ -42,7 +45,7 @@ struct board_evaler* board_evaler_constructor(void){
 float get_eval(long long p1, long long p2, long long p1k, long long p2k, struct set* piece_loc, struct board_evaler* evaler, int depth, long long int hash, int depth_abs, int player){
     //return calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
 
-    // see if the hash is in the table
+    //see if the hash is in the table
     float eval = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs, player);
     if (isnan(eval)){
         // there was no entry found so lets calculate it
