@@ -61,6 +61,7 @@ void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_d
 struct board_data {    
     float eval;
     unsigned long long int hash;
+    struct board_data* parent;
     int player;
     int move_start;
     int move_end;
@@ -88,6 +89,13 @@ struct board_data *board_data_constructor(int player, int move_start, int move_e
     board->move_end = move_end;
     board->num_moves = -1;
     board->next_boards = NULL;
+    
+    // since the head of the tree has no parent set it to a board with hash 0 pointing to itself
+    board->parent = malloc(sizeof(struct board_data));
+    board->parent->hash = 0;
+    board->parent->parent = board->parent;
+
+    // store the hash of 
     return board;
 }
 
@@ -621,8 +629,20 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     float max_eval = -INFINITY;
     unsigned long long int next_hash;
     struct board_data* temp_board;
+    
+    // check if this board has been searched to depth before and if so return the eval from the hash table
+    float potential_eval = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs, player);
+    if (!isnan(potential_eval)){
+        best_moves->eval = potential_eval;
+        return potential_eval;
+    }
+
+    // check if the moves are being repeated in this line of moves and if so evaluate this as a draw and return
+    if (best_moves->parent->parent->parent->parent->hash == hash)
+        return 0.0;
+    
     // if the depth is 0 then we are at the end of the standard search so begin the captures search
-    if (depth <= 0){
+    if (depth < 0){
         captures_only = True;
     }
 
@@ -654,6 +674,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             temp_board->player = -1;
             temp_board->next_boards = NULL;
             temp_board->hash = 0ull;
+            temp_board->parent = best_moves;
         }
     }
     // if moves where already in the move tree then use them
@@ -679,7 +700,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             best_moves->eval = board_eval;
 
             // store the board in the hash map
-            //add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth);
+            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player);
             
             return board_eval;
         }
@@ -690,15 +711,6 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             evaler->boards_evaluated++;
             return board_eval;
         }
-    }
-
-    // check if this board has been searched to depth before and if so return the eval from the hash table
-    float potential_eval = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs, player);
-    if (!isnan(potential_eval)){
-        evaler->boards_evaluated++;
-        best_moves->hash = hash;
-        best_moves->eval = potential_eval;
-        return potential_eval;
     }
 
     temp_board = best_moves->next_boards;
@@ -726,7 +738,15 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         }
 
         // call the function recursivly 
-        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth - 1, alpha, beta, captures_only, temp_board, evaler, next_hash, depth_abs + 1);
+        // if the player is the same do not change the depth
+        int depth_next = depth;
+        int depth_abs_next = depth_abs;
+        if (player_next != player){
+            depth_next--;
+            depth_abs_next++;
+        }
+        
+        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next, alpha, beta, captures_only, temp_board, evaler, next_hash, depth_abs_next);
         
         // undo the update to the board and piece locations
         undo_piece_locations_update(temp_board->move_start, temp_board->move_end, piece_loc);
@@ -803,7 +823,8 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         if (cpu_time_used > search_time){
             terminate = 1;
         }
-        else if (eval_ > 100.0 || eval_ < -100.0){
+        // only terminate if the mate value is absolute
+        else if ((eval_ > 900.0 || eval_ < -900.0)){
             terminate = 1;
         }
         else if (best_moves->num_moves == 1){
@@ -816,15 +837,21 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
 
     // print some final info about the search
     // print 50 dashes
-    for (int i = 0; i < 50; i++){
-        printf("-");
-    }
-    printf("\n\ninitial hash: %lld\n", hash);
+    // these cryptic looking prints are changing the terminal color
+    printf("\033[1;35m");
+    printf("Search Results:\n");
+    printf("\033[0;32m");
     printf("hashes stored: %lld\n", evaler->hash_table->num_entries);
+    printf("boards searched: %lld\n", evaler->boards_evaluated);
     printf("search time: %f\n", cpu_time_used);
+    printf("\033[0;34m");
     printf("search depth: %d\n", depth);
-    printf("best_eval: %f\n", best_moves->eval);
-    printf("boards searched: %lld\n\n", evaler->boards_evaluated);
+    printf("best_eval: %f\n\n", best_moves->eval);
+
+    printf("\033[0m");
+
+    // print the line of best moves to the terminal (deguggigng)
+    //print_line(p1, p2, p1k, p2k, best_moves, depth);
 
     // free the memory that is no longer needed
     free(piece_offsets);
@@ -845,6 +872,7 @@ void end_board_search(struct board_data* best_moves, struct board_evaler* evaler
     free(evaler);
     // free the memory used by the search tree
     free_board_data(best_moves);
+    free(best_moves->parent);
     free(best_moves);
 }
 
