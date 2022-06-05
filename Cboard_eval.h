@@ -7,6 +7,7 @@
 #include "Cneural_net.h"
 #include "Ckiller_table.h"
 
+
 // define some functions
 float* compute_piece_pos();
 float* compute_king_pos();
@@ -19,7 +20,7 @@ float evaluate_pos(int type, int pos, struct board_evaler* evaler);
 struct board_evaler{
     float *piece_pos_map;
     float *king_pos_map;
-    long long int boards_evaluated;
+    long long int nodes;
     int search_depth;
     struct neural_net *NN_evaler;
     struct hash_table* hash_table;
@@ -30,7 +31,7 @@ struct board_evaler* board_evaler_constructor(int search_depth){
     struct board_evaler* evaler = (struct board_evaler*)malloc(sizeof(struct board_evaler));
     evaler->piece_pos_map = compute_piece_pos();
     evaler->king_pos_map = compute_king_pos();
-    evaler->boards_evaluated = 0ll;
+    evaler->nodes = 0ll;
     evaler->NN_evaler = load_network_from_file("neural_net/neural_net");
     // prepare a table of size 8,388,608 
     long long int hash_table_size = 1 << 23;
@@ -40,23 +41,13 @@ struct board_evaler* board_evaler_constructor(int search_depth){
     return evaler;
 }
 
-// get the board evaluation from the hash table or if not there, calculate it and put it in the hash table
-// hash table is not yet implimented
-float get_eval(long long p1, long long p2, long long p1k, long long p2k, struct set* piece_loc, struct board_evaler* evaler, int depth, long long int hash, int depth_abs, int player){
-    //return calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
+// get the evaluation for a board given the board state
+float get_eval(long long p1, long long p2, long long p1k, long long p2k, struct set* piece_loc, struct board_evaler* evaler){
+    // there was no entry found so lets calculate it
+    float eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
 
-    //see if the hash is in the table
-    float eval = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs, player);
-    if (isnan(eval)){
-        // there was no entry found so lets calculate it
-        eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
-
-        // test neural net
-        //eval = (float)get_output(evaler->NN_evaler, p1, p2, p1k, p2k); // neural_net
-
-        // store the eval for future use
-        add_hash_entry(evaler->hash_table, hash, eval, depth_abs, evaler->search_depth, player);
-    }
+    // test neural net (subtract 5 from the eval to 0 being a draw)
+    //eval = (float)get_output(evaler->NN_evaler, p1, p2, p1k, p2k) - 5.0; // neural_net
 
     return eval;
 }

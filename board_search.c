@@ -63,8 +63,8 @@ struct board_data {
     unsigned long long int hash;
     struct board_data* parent;
     int player;
-    int move_start;
-    int move_end;
+    char move_start;
+    char move_end;
     int num_moves;
     int prunned_loc;
     struct board_data *next_boards;
@@ -128,7 +128,7 @@ static PyObject* search_position(PyObject *self, PyObject *args){
     PyList_Append(py_list, py_tuple);
 
     // get some stats about the search
-    py_tuple = Py_BuildValue("KKKf", board_info->evaler->search_depth, board_info->evaler->boards_evaluated, board_info->evaler->hash_table->num_entries, best_move->eval);
+    py_tuple = Py_BuildValue("KKKf", board_info->evaler->search_depth, board_info->evaler->nodes, board_info->evaler->hash_table->num_entries, best_move->eval);
     PyList_Append(py_list, py_tuple);
 
     // free the search tree the evaler and the transposition table
@@ -265,6 +265,39 @@ void undo_piece_locations_update(int piece_loc_initial, int piece_loc_after, str
     // add the piece that moved back to the set and remove its new location from the set (ie. undo the move)
     set_remove(piece_loc, piece_loc_after);
     set_add(piece_loc, piece_loc_initial);
+}
+
+// after sorting or at anytime before continuing to search the tree, move the moves in the transposition table
+// to the start of the move list
+void order_table_moves(struct board_data* ptr, struct hash_table_entry* entry){
+    short best_move = entry->best_move;
+    short refutation_move = entry->refutation_move;
+    if (best_move != 0){
+        char start = best_move >> 8;
+        char end = best_move & 0xFF;
+        // move the best move to the start of the move list
+        for (int i = 0; i < ptr->num_moves; i++){
+            if (ptr->next_boards[i].move_start == start && ptr->next_boards[i].move_end == end){
+                struct board_data temp = ptr->next_boards[i];
+                ptr->next_boards[i] = ptr->next_boards[0]; // moving the other move to the other location could be a performance hit
+                ptr->next_boards[0] = temp;
+                break;   
+            }
+        }
+    }
+    if (refutation_move != 0 && refutation_move != best_move){
+        char start = refutation_move >> 8;
+        char end = refutation_move & 0xFF;
+        // move the refutation move to the start of the move list
+        for (int i = 0; i < ptr->num_moves; i++){
+            if (ptr->next_boards[i].move_start == start && ptr->next_boards[i].move_end == end){
+                struct board_data temp = ptr->next_boards[i];
+                ptr->next_boards[i] = ptr->next_boards[1]; // moving the other move to the other location could be a performance hit
+                ptr->next_boards[1] = temp;
+                break;     
+            }
+        }
+    }
 }
 
 // takes a pointer to the board_data struct that we want to sort the moves for 
@@ -629,12 +662,36 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     float max_eval = -INFINITY;
     unsigned long long int next_hash;
     struct board_data* temp_board;
+    evaler->nodes++;
     
     // check if this board has been searched to depth before and if so return the eval from the hash table
-    float potential_eval = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs, player);
-    if (!isnan(potential_eval)){
-        best_moves->eval = potential_eval;
-        return potential_eval;
+    // if the value is not a PV-node then use the info that can be used to prune the search
+    struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs, player);
+    if (table_entry != NULL){
+        // if the entry is usable set max and min eval or just return the eval if it is a PV-node
+        // if it is not the entry will still be used for move ordering
+        if (table_entry->age == evaler->search_depth && table_entry->depth <= depth_abs){
+            if (table_entry->node_type == PV_NODE){
+                best_moves->eval = table_entry->eval;
+                return table_entry->eval;
+            }
+            else if (table_entry->node_type == FAIL_HIGH){
+                max_eval = table_entry->eval;
+                // in some cases this is good enough to cause a instant cutoff
+                if (max_eval >= beta){
+                    best_moves->eval = max_eval;
+                    return max_eval;
+                }
+            }
+            else if (table_entry->node_type == FAIL_LOW){
+                min_eval = table_entry->eval;
+                // in some cases this is good enough to cause a instant cutoff
+                if (min_eval <= alpha){
+                    best_moves->eval = min_eval;
+                    return min_eval;
+                }
+            }
+        }
     }
 
     // check if the moves are being repeated in this line of moves and if so evaluate this as a draw and return
@@ -676,6 +733,13 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             temp_board->hash = 0ull;
             temp_board->parent = best_moves;
         }
+
+        // before continuing from this block of code, check if the hash table has a value for this board
+        // if it does then use that to order the moves
+        if (table_entry != NULL && num_moves > 0){
+            order_table_moves(best_moves, table_entry);
+
+        }
     }
     // if moves where already in the move tree then use them
     else{
@@ -683,6 +747,12 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         // sort moves here (optimizatizes alpha beta prunning if better move's are looked at first)
         // only sort the moves that where evaluated as moves after a prune should be considered low eval for the player
         sort_moves(best_moves, best_moves->prunned_loc);
+
+        // although the moves are sorted the transposition table might have a better move so check for that
+        if (table_entry != NULL && num_moves > 0){
+            order_table_moves(best_moves, table_entry);
+        }
+
     }
     // if there are no move then a player must have won, or there are no captures so end this branch (only count as a win if captures_only is false)
     // this is not a perfect check but it should be good enough (ie a player has a piece with no legal moves and we are looking at the captures search)
@@ -696,25 +766,27 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             else{
                 board_eval = 1000.0 - depth_abs;
             }
-            evaler->boards_evaluated++;
             best_moves->eval = board_eval;
 
             // store the board in the hash map
-            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player);
-            
+            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, NO_MOVE, NO_MOVE, PV_NODE);
             return board_eval;
         }
         // if there are no moves and captures only is true then we found the end of a catures only search evaluate the position and return
         else{
-            board_eval = get_eval(*p1, *p2, *p1k, *p2k, piece_loc, evaler, depth, hash, depth_abs, player);
+            board_eval = get_eval(*p1, *p2, *p1k, *p2k, piece_loc, evaler);
             best_moves->eval = board_eval;
-            evaler->boards_evaluated++;
+
+            // store the board in the hash map
+            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, NO_MOVE, NO_MOVE, PV_NODE);
             return board_eval;
         }
     }
 
+    // the childer nodes are now ready to be searched so begin the search
+    short best_move = NO_MOVE;
+    short refutation_move = NO_MOVE;
     temp_board = best_moves->next_boards;
-    // if there are moves then we need to search them all
     for (int i = 0; i < num_moves; i++){
         // get the board data for the next move
         temp_board = best_moves->next_boards + i;
@@ -754,35 +826,64 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 
         // alpha beta prunning
         if (player == 1){
-            max_eval = max(max_eval, temp_board->eval);
-            alpha = max(alpha, max_eval);
-            if (alpha > beta){
+            if (max_eval < temp_board->eval){
+                max_eval = temp_board->eval;
+                // set the best move
+                best_move = (temp_board->move_start << 8) | temp_board->move_end; 
+            }
+            // if the max eval is now greater than before then this is the refutation move
+            if (max_eval > alpha){
+                refutation_move = (temp_board->move_start << 8) | temp_board->move_end;
+                alpha = max_eval;
+            }
+            // prune if a cut off occurs
+            if (alpha >= beta){
                 best_moves->prunned_loc = i + 1;
                 break;
             }
         }
         else{
-            min_eval = min(min_eval, temp_board->eval);
-            beta = min(beta, min_eval);
-            if (alpha > beta){
+            if (min_eval > temp_board->eval){
+                min_eval = temp_board->eval;
+                // set the best move
+                best_move = (temp_board->move_start << 8) | temp_board->move_end;
+            }
+            // if the min eval is now less than before then this is the refutation move
+            if (min_eval < beta){
+                refutation_move = (temp_board->move_start << 8) | temp_board->move_end;
+                beta = min_eval;
+            }
+            // prune if a cut off occurs
+            if (alpha >= beta){
                 best_moves->prunned_loc = i + 1;
                 break;
             }
         }
     }
     // once all the moves have been searched set the eval of this board to the best move found and return the best eval
-    if (player == 1){
+    if (player == 1)
         board_eval = max_eval;
-    }
-    else {
+    else 
         board_eval = min_eval;
-    }
     // update the eval of this board
     best_moves->eval = board_eval;
 
-    // store the eval in the hash table
-    add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player);
+    // store the eval in the hash table (must find the type of node first before storing it)
+    // find node type by seeing if this node caused a alpha/beta cutoff
+    char node_type = PV_NODE;
     
+    if (board_eval <= alpha){
+        node_type = FAIL_LOW;
+    }
+    else if (board_eval >= beta){
+        node_type = FAIL_HIGH;
+    }
+    else{
+        node_type = PV_NODE;
+    }
+    
+
+    add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, best_move, refutation_move, node_type);
     return board_eval;
 }
 
@@ -842,7 +943,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     printf("Search Results:\n");
     printf("\033[0;32m");
     printf("hashes stored: %lld\n", evaler->hash_table->num_entries);
-    printf("boards searched: %lld\n", evaler->boards_evaluated);
+    printf("boards searched: %lld\n", evaler->nodes);
     printf("search time: %f\n", cpu_time_used);
     printf("\033[0;34m");
     printf("search depth: %d\n", depth);
