@@ -155,12 +155,12 @@ class Gui(): # class to deal with the visual elements for the human player
         pygame.draw.rect(self.screen, Gui.CD, (block_width * 8, 0, self.size[0], self.size[1]))
         pygame.draw.line(self.screen, Gui.C2, (block_width * 8, 0), (block_width * 8, self.size[1]), 4)
         # draw the leafs searched
-        self.screen.blit(pygame.font.SysFont('Corbel', 18).render('Boards Searched:', True, (0, 0, 0)),
+        self.screen.blit(pygame.font.SysFont('Corbel', 18).render('Nodes:', True, (0, 0, 0)),
                     (self.size[1] + 10, self.size[1]/8 * 1))
         self.screen.blit(pygame.font.SysFont('Corbel', 16).render(str(self.leafs), True, (0, 0, 0)),
                     (self.size[1] + 20, self.size[1]/8 * 1.5))
         # draw the hashes generated
-        self.screen.blit(pygame.font.SysFont('Corbel', 18).render('Hashes Generated:', True, (0, 0, 0)),
+        self.screen.blit(pygame.font.SysFont('Corbel', 18).render('Transpositions:', True, (0, 0, 0)),
             (self.size[1] + 10, self.size[1]/8 * 2))
         self.screen.blit(pygame.font.SysFont('Corbel', 16).render(str(self.hashes), True, (0, 0, 0)),
                     (self.size[1] + 20, self.size[1]/8 * 2.5))
