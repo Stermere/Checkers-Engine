@@ -891,15 +891,15 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     // depending on the node number reduce the depth of the search as only the first few nodes are super important
     // if the node number is less than 4 then do a full search
     // if the node number is greater than 4 then do a reduced search
-    if (node_num > 4 && depth_abs > 6){
-        depth = depth - 3;
+    if (depth_abs > 3 && node_num > 2){
+        if (node_num > 6){
+            depth -= 2;
+        }
+        else{
+            depth -= 1;
+        }
     }
-    else if (node_num > 4 && depth_abs > 4){
-        depth = depth - 2;
-    }
-    else if (node_num > 4 && depth_abs > 2){
-        depth = depth - 1;
-    }
+
 
     // the childer nodes are now ready to be searched so begin the search
     short best_move = NO_MOVE;
