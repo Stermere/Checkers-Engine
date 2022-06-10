@@ -228,10 +228,6 @@ def main(args) -> None:
             game_history = []
 
 
-# TODO put the logic to start the threads in its own file so this is not gross and bad
-# this seems to fix the problem with threads doing weird things when the program is packaged with pyinstaller
-mp.freeze_support()
-
 if __name__ == '__main__':
     # import modules needed for the main thread
     import pygame
