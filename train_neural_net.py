@@ -69,7 +69,7 @@ def test_neural_net(neural_net_file, data_set_file):
 def play_game(save_list):
     # create a board
     board = Board()
-    search_time = 2.5
+    search_time = 1.5
     # create a list to store the game data
     game = []
     num_moves = 0
@@ -100,7 +100,7 @@ def play_game(save_list):
         # if the game is more than 6 moves we use the search engine to find the best move
         else:
             # get the best move
-            best_move = search_engine.search_position(p1, p2, p1k, p2k, player, search_time, 25)
+            best_move = search_engine.search_position(p1, p2, p1k, p2k, player, search_time, 24)
 
             # convert the best move to a matrix move
             best_move = convert_bit_move(best_move[-2])
@@ -214,7 +214,7 @@ def play_n_games(n):
     manager = mp.Manager()
     
     # variable to store the index of the file being written to
-    file_index = 614
+    file_index = 333
 
     for i in range(n // 8):
         # create a list to store the game data
@@ -237,10 +237,7 @@ def play_n_games(n):
             
         # save the game data to a file
         for j in range(len(save_list)):
-            # ties can confuse the network and cause overfiting so we remove them
-            if save_list[j][-1] == 0:
-                continue
-            game_to_file(save_list[j], "data_set/old_eval/pre_training_data" + str(file_index) + ".ds")
+            game_to_file(save_list[j], "data_set/old_eval/training_data" + str(file_index) + ".ds")
             file_index += 1
 
 
@@ -322,7 +319,7 @@ def main():
     #print("Data generated! exiting...")
 
     # write the games to a training and testing file
-    #conv_gamefiles_to_ds("data_set/old_eval/pre_training_data", "data_set/pre_training", 600, True)
+    #conv_gamefiles_to_ds("data_set/old_eval/training_data", "data_set/data_set", 300, True)
     #exit(1)
 
     # train the neural network on itself
@@ -331,25 +328,25 @@ def main():
     #exit(1)
 
     # play a number of games and save the game data to a file (for bulk data creation)
-    #play_n_games(100000)
+    #play_n_games(10000)
     #exit(0)
 
     # test the neural network 
     print("testing neural network...")
-    error_start = abs(test_neural_net("neural_net/neural_net", "data_set/pre_training_test"))
+    error_start = abs(test_neural_net("neural_net/neural_net", "data_set/data_set_test"))
 
     # train the neural network using the data set
     print("training neural network...")
-    train_neural_net("neural_net/neural_net", "data_set/pre_training_train", 100, 0.001)
+    train_neural_net("neural_net/neural_net", "data_set/data_set_train", 64, 0.01)
         
 
     # test the neural network on the test data set
     print("testing neural network...")
-    error_end = abs(test_neural_net("neural_net/neural_net", "data_set/pre_training_test"))
+    error_end = abs(test_neural_net("neural_net/neural_net", "data_set/data_set_test"))
 
     # test the neural network on the training data set
     print("testing neural network...")
-    error_end_training = abs(test_neural_net("neural_net/neural_net", "data_set/pre_training_train"))
+    error_end_training = abs(test_neural_net("neural_net/neural_net", "data_set/data_set_train"))
 
     print()
     print("error test_init: " + str(error_start))
