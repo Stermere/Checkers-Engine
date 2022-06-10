@@ -27,9 +27,11 @@ struct board_evaler{
     struct neural_net *NN_evaler;
     struct hash_table* hash_table;
     struct killer_table* killer_table;
+    clock_t start_time;
+    double time_limit;
 };
 
-struct board_evaler* board_evaler_constructor(int search_depth){
+struct board_evaler* board_evaler_constructor(int search_depth, double time_limit, clock_t start_time){
     struct board_evaler* evaler = (struct board_evaler*)malloc(sizeof(struct board_evaler));
     evaler->piece_pos_map_p1 = compute_piece_pos_p1();
     evaler->piece_pos_map_p2 = compute_piece_pos_p2();
@@ -40,7 +42,8 @@ struct board_evaler* board_evaler_constructor(int search_depth){
     long long int hash_table_size = 1 << 23;
     evaler->hash_table = init_hash_table(hash_table_size);
     evaler->killer_table = init_killer_table(search_depth);
-
+    evaler->start_time = start_time;
+    evaler->time_limit = time_limit;
     return evaler;
 }
 
@@ -125,8 +128,8 @@ float* compute_piece_pos_p1(){
         {0, 0, 1, 1, 1, 1, 0, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
-        {0, 4, 0, 0, 0, 4, 0, 4},
-        {4, 2, 4, 2, 2, 2, 4, 2}
+        {0, 0, 0, 0, 0, 4, 0, 4},
+        {4, 2, 4, 2, 4, 2, 4, 2}
     };
     for (int i = 0; i < 64; i++){
         eval_table[i] = table[i / 8][i % 8]/ 10.0;
@@ -139,8 +142,8 @@ float* compute_piece_pos_p2(){
     float *eval_table = (float*)malloc(sizeof(float) * 64);
     // mirror the table
     float table[8][8] = { 
-        {2, 4, 2, 2, 2, 4, 2, 4},
-        {4, 0, 4, 0, 0, 0, 4, 0},
+        {2, 4, 2, 4, 2, 4, 2, 4},
+        {4, 0, 4, 0, 0, 0, 0, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},

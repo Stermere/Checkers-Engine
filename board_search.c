@@ -427,23 +427,6 @@ void merge(struct board_data* ptr, int half, int num_elements){
     free(right);
 }
 
-// clone the board_data struct passed as a parameter
-// returns a pointer to the cloned struct
-// not a full clone of the struct only a copy of the basic data
-struct board_data* clone_board_data(struct board_data* ptr){
-    struct board_data* clone = malloc(sizeof(struct board_data));
-    clone->move_start = ptr->move_start;
-    clone->move_end = ptr->move_end;
-    clone->eval = ptr->eval;
-    clone->hash = ptr->hash;
-    clone->parent = ptr->parent;    
-    clone->player = ptr->player;                  
-    clone->num_moves = -1;
-    clone->next_boards = NULL;
-
-    return clone;
-}
-
 // find the state of the next board after a move
 // returns 1 if the moving player is player 2 returns 0 if the player is player 1
 // pos is the position the piece will be after the first jump and leading in to the second one
@@ -717,6 +700,17 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     unsigned long long int next_hash;
     struct board_data* temp_board;
     evaler->nodes++;
+
+    // if nodes is divisible by 10000, check the time
+    if (evaler->nodes % 10000 == 0){
+        clock_t current_time = clock();
+        double cpu_time_used = ((double)(current_time - evaler->start_time)) / CLOCKS_PER_SEC;
+        // print time used and time limit
+        if (cpu_time_used > evaler->time_limit){
+            return INFINITY;
+
+        }
+    }
     
     // check if this board has been searched to depth before and if so return the eval from the hash table
     // if the value is not a PV-node then use the info that can be used to prune the search
@@ -835,64 +829,14 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         }
     }
 
-    // before searching to full depth do a null move pruning
-    // if the move is a capture then do not do a null move pruning
-    // if the move is at a depth greater than 9 than do nothing 
-    ///////////////////////////////////
-    if ((abs(best_moves->move_end - best_moves->move_start) < 10) && (depth >= 5 && depth_abs >= 4) && (search_type == SEARCH_TYPE_NORMAL) && (node_num > 2) && (num_moves > 2) && 0 == 1){
-        // do a null move pruning with an R of 3 and free the memeory after the search
-        // clone the current node and hand it of to a null move search
-        struct board_data *null_move_board = clone_board_data(best_moves);
-        null_move_board->player = player ^ 0x3; // have the player forgo a move and switch to the other player
-        null_move_board->hash = hash + 78966457ull; // set the hash to a different value so it does not collide with the original board
-
-        float null_eval = search_board(p1, p2, p1k, p2k, player ^ 0x3, piece_loc, offsets, depth - 3, // depth - 3 because we are doing a null move pruning
-                                        alpha, beta, captures_only, temp_board, evaler, null_move_board->hash,
-                                        depth_abs + 3, SEARCH_TYPE_NULL, 0); // do a null move search
-
-        // if the null move search still causes a cutoff then we can prune the node and return (do not store the move in the hash table) 
-        if (null_eval >= beta && player == 1){
-            best_moves->eval = null_move_board->eval;
-            free_board_data(null_move_board);
-
-            printf("depth %d null move pruning\n", depth_abs);
-
-            return null_eval;
-
-        }
-        else if (alpha >= null_eval && player == 2){
-            best_moves->eval = null_move_board->eval;
-            free_board_data(null_move_board);
-
-            printf("depth: %d\n", depth);
-
-            return null_eval;   
-
-        }
-        else{
-            free_board_data(null_move_board);
-        }
-
-        // print info about the current node
-        printf("depth %d\n", depth);
-        printf("nodes %d\n", evaler->nodes);
-        printf("alpha %f\n", alpha);
-        printf("beta %f\n", beta);
-        printf("null_eval %f\n", null_eval);
-        printf("player %d\n", player);
-        printf("node_num %d\n", node_num);
-        printf("depth_abs %d\n", depth_abs);
-        printf("number of moves %d\n", num_moves);
-        printf("\n");
-
-    }
-    ///////////////
-
     // depending on the node number reduce the depth of the search as only the first few nodes are super important
     // if the node number is less than 4 then do a full search
     // if the node number is greater than 4 then do a reduced search
-    if (depth_abs > 3 && node_num > 2){
-        if (node_num > 6){
+    if (depth_abs > 3 && node_num > 1){
+        if (node_num > 5){
+            depth -= 3;
+        }
+        else if (node_num > 3){
             depth -= 2;
         }
         else{
@@ -939,6 +883,11 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
                                         alpha, beta, captures_only, temp_board, evaler, next_hash,
                                         depth_abs_next, search_type, i);
+
+        // if the eval is infinity the search is trying to end so return
+        if (temp_board->eval == INFINITY){
+            return INFINITY;
+        }
         
         // undo the update to the board and piece locations
         undo_piece_locations_update(temp_board->move_start, temp_board->move_end, piece_loc);
@@ -1015,13 +964,22 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth){
     struct search_info* return_struct = malloc(sizeof(struct search_info));
 
+    // handle for colored terminal output
+    HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    // set it to orange
+    SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+
     // malloc the data needed for the array (data needed is num spaces * nummovedir * sizeof(int))
     int* piece_offsets = malloc(sizeof(int) * 64 * 4);
     compute_offsets(piece_offsets);
     struct set* piece_loc = get_piece_locations(p1, p2, p1k, p2k);
     // the tree will be stored in a linked list of best_move structs (populated during search)
     struct board_data* best_moves = board_data_constructor(player, -1, -1);
-    struct board_evaler* evaler = board_evaler_constructor(search_depth); 
+    clock_t start_time = clock();
+    struct board_evaler* evaler = board_evaler_constructor(search_depth, search_time, start_time); 
+    struct board_data* best_moves_clone = board_data_constructor(player, -1, -1);
+    best_moves_clone->next_boards = malloc(sizeof(struct board_data) * 64);
+    best_moves_clone->parent = best_moves->parent;
     // get the starting hash
     intLong hash = get_hash(p1, p2, p1k, p2k, evaler->hash_table);
     float eval_;
@@ -1038,9 +996,17 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
         // update the evalers search depth
         evaler->search_depth = i;
+
         eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0,
                              best_moves, evaler, hash, 0, SEARCH_TYPE_NORMAL, 0);
+        // if the eval is infinity the search is trying to end
+        if (eval_ == INFINITY){
+            terminate = 1;
+            break;
+        }
         depth = i;
+
+        printf("\rEval: %f, \tDepth: %d", eval_, depth);
         // get the end time
         end = clock();
         cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -1054,13 +1020,19 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         else if (best_moves->num_moves == 1){
             terminate = 1;
         }
+
+        // clone the best_moves so that the search can be terminated if the time is up
+        for (int j = 0; j < best_moves->num_moves; j++){
+            best_moves_clone->next_boards[j] = best_moves->next_boards[j];
+            best_moves_clone->eval = best_moves->eval;
+            best_moves_clone->player = best_moves->player;
+        }
     }
+
+    printf("\r                                          \r"); // clear the output from the progress indicator
 
     // print the line of best moves to the terminal (deguggigng)
     //print_line(p1, p2, p1k, p2k, best_moves, depth);
-
-    // print some search info to the terminal with color
-    HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 
     SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_INTENSITY);
     printf("Search Results:\n");
@@ -1070,7 +1042,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     printf("search time: %f\n", cpu_time_used);
     SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
     printf("search depth: %d\n", depth);
-    printf("best_eval: %f\n\n", best_moves->eval);
+    printf("best_eval: %f\n\n", best_moves_clone->eval);
 
     // set the text color to white
     SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
@@ -1078,11 +1050,14 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     // print the line of best moves to the terminal (deguggigng)
     //print_line(p1, p2, p1k, p2k, best_moves, depth);
 
+    // free the board_tree (since the one ply clone is sent back)
+    free_board_data(best_moves);
+
     // free the memory that is no longer needed
     free(piece_offsets);
     free(piece_loc);
 
-    return_struct->head = best_moves;
+    return_struct->head = best_moves_clone;
     return_struct->evaler = evaler;
     
     // return the best moves and evaler
@@ -1097,6 +1072,7 @@ void end_board_search(struct board_data* best_moves, struct board_evaler* evaler
     free(evaler->killer_table->table);
     free(evaler->killer_table);
     free(evaler);
+
     // free the memory used by the search tree
     free_board_data(best_moves);
     free(best_moves->parent);
