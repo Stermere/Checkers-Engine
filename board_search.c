@@ -833,12 +833,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     // if the node number is less than 4 then do a full search
     // if the node number is greater than 4 then do a reduced search
     if (depth_abs > 5 && node_num > 2){
-        if (node_num > 5){
-            depth -= 2;
-        }
-        else{
-            depth -= 1;
-        }
+        depth -= 1;
     }
 
 
@@ -999,6 +994,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         // if the eval is infinity the search is trying to end
         if (eval_ == INFINITY){
             terminate = 1;
+            evaler->search_depth = depth;
             break;
         }
         depth = i;
