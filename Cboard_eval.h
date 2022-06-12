@@ -50,10 +50,10 @@ struct board_evaler* board_evaler_constructor(int search_depth, double time_limi
 // get the evaluation for a board given the board state
 float get_eval(long long p1, long long p2, long long p1k, long long p2k, struct set* piece_loc, struct board_evaler* evaler){
     // there was no entry found so lets calculate it
-    float eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
+    //float eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
 
     // test neural net (subtract 5 from the eval to 0 being a draw)
-    //float eval = (float)get_output(evaler->NN_evaler, p1, p2, p1k, p2k) - 5.0; // neural_net
+    float eval = (float)get_output(evaler->NN_evaler, p1, p2, p1k, p2k) - 5.0; // neural_net
 
     return eval;
 }
@@ -165,14 +165,14 @@ float* compute_piece_pos_p2(){
 float* compute_king_pos(){
     float *eval_table = (float*)malloc(sizeof(float) * 64);
         float init_table[8][8] = {
-         {0 ,-1, 0 , -2, 0 , -2, 0, -2},
-         {-1, 0,-1 , 0 , 0 , 0 , 0,  0},
-         {0 ,-1, 3 , 3 , 3 , 3 , 0, -2},
-         {-2, 0, 3 , 3 , 3 , 3 , 0,  0},
-         {0 , 0, 3 , 3 , 3 , 3 , 0, -2},
-         {-2, 0, 3 , 3 , 3 , 3 ,-1,  0},
-         {0 , 0, 0 , 0 , 0 ,-1 , 0, -1},
-         {-2, 0, -2, 0 , -2, 0 ,-1,  0}
+        {0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 3, 3, 3, 3, 0, 0}, 
+        {0, 0, 3, 3, 3, 3, 0, 0}, 
+        {0, 0, 3, 3, 3, 3, 0, 0}, 
+        {0, 0, 3, 3, 3, 3, 0, 0}, 
+        {0, 0, 0, 0, 0, 0, 0, 0}, 
+        {0, 0, 0, 0, 0, 0, 0, 0}
         };
     for (int i = 0; i < 64; i++){
         eval_table[i] = init_table[i / 8][i % 8] / 10.0;

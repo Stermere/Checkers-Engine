@@ -702,7 +702,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     evaler->nodes++;
 
     // if nodes is divisible by 10000, check the time
-    if (evaler->nodes % 10000 == 0){
+    if (evaler->nodes % 10000 == 0 && evaler->nodes != 0){
         clock_t current_time = clock();
         double cpu_time_used = ((double)(current_time - evaler->start_time)) / CLOCKS_PER_SEC;
         // print time used and time limit
@@ -981,8 +981,9 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     int depth;
     int terminate = 0;
     start = clock();
+    evaler->start_time = start;
     // call the search function
-    for (int i = 8; i <= search_depth; i++){
+    for (int i = 1; i <= search_depth; i++){
         if (terminate == 1){
             break;
         }

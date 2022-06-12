@@ -36,6 +36,7 @@ double get_output(struct neural_net *net, long long int p1, long long int p2, lo
 // put the input in to the first layers output
 void populate_input(struct neural_net *net, long long int p1, long long int p2, long long int p1k, long long int p2k){
     struct layer *input_layer = net->layers;
+    // map of the shift amounts to get a certain piece
     int shift_map[] = {
         1, 3, 5, 7,
         8, 10, 12, 14,
