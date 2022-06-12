@@ -832,11 +832,8 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     // depending on the node number reduce the depth of the search as only the first few nodes are super important
     // if the node number is less than 4 then do a full search
     // if the node number is greater than 4 then do a reduced search
-    if (depth_abs > 3 && node_num > 1){
+    if (depth_abs > 3 && node_num > 2){
         if (node_num > 5){
-            depth -= 3;
-        }
-        else if (node_num > 3){
             depth -= 2;
         }
         else{
@@ -978,7 +975,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     clock_t start_time = clock();
     struct board_evaler* evaler = board_evaler_constructor(search_depth, search_time, start_time); 
     struct board_data* best_moves_clone = board_data_constructor(player, -1, -1);
-    best_moves_clone->next_boards = malloc(sizeof(struct board_data) * 64);
+    best_moves_clone->next_boards = NULL;
     best_moves_clone->parent = best_moves->parent;
     // get the starting hash
     intLong hash = get_hash(p1, p2, p1k, p2k, evaler->hash_table);
@@ -1014,7 +1011,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
             terminate = 1;
         }
         // only terminate if the mate value is absolute
-        else if ((eval_ > 900.0 || eval_ < -900.0)){
+        else if ((eval_ > 200.0 || eval_ < -200.0)){
             terminate = 1;
         }
         else if (best_moves->num_moves == 1){
@@ -1022,10 +1019,15 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
 
         // clone the best_moves so that the search can be terminated if the time is up
+        if (best_moves_clone->next_boards == NULL){
+            best_moves_clone->next_boards = malloc(sizeof(struct board_data) * best_moves->num_moves);
+            best_moves_clone->num_moves = best_moves->num_moves;
+        }
         for (int j = 0; j < best_moves->num_moves; j++){
             best_moves_clone->next_boards[j] = best_moves->next_boards[j];
             best_moves_clone->eval = best_moves->eval;
             best_moves_clone->player = best_moves->player;
+
         }
     }
 
@@ -1074,8 +1076,9 @@ void end_board_search(struct board_data* best_moves, struct board_evaler* evaler
     free(evaler);
 
     // free the memory used by the search tree
-    free_board_data(best_moves);
+    //free_board_data(best_moves);
     free(best_moves->parent);
+    free(best_moves->next_boards);
     free(best_moves);
 }
 
