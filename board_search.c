@@ -832,7 +832,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     // depending on the node number reduce the depth of the search as only the first few nodes are super important
     // if the node number is less than 4 then do a full search
     // if the node number is greater than 4 then do a reduced search
-    if (depth_abs > 3 && node_num > 2){
+    if (depth_abs > 5 && node_num > 2){
         if (node_num > 5){
             depth -= 2;
         }
