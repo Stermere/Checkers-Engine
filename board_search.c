@@ -829,10 +829,23 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         }
     }
 
-    // depending on the node number reduce the depth of the search as only the first few nodes are super important
-    // if the node number is less than 4 then do a full search
-    // if the node number is greater than 4 then do a reduced search
-    if (depth_abs > 5 && node_num > 2){
+    // depending on the node number reduce the depth of the search as only the first few nodes are important
+    // this is done to avoid the search taking too long and to try and increase the depth of the search
+    // dy reducing depth of moves that fall below the mid point of alpha and beta will further reduce this
+    if (depth_abs > 3){
+        if (player == 1){
+            if (best_moves->eval < (alpha + beta) * 0.5){
+                depth = depth - 1;
+            }
+        }
+        else if (player == 2){
+            if (best_moves->eval > (alpha + beta) * 0.5){
+                depth = depth - 1;
+            }
+        }
+    }
+
+    if (depth_abs > 3 && node_num > 2){
         depth -= 1;
     }
 
