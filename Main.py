@@ -122,7 +122,7 @@ def main(args) -> None:
             # for bot on bot
             if BOT_PLAYING:
                 # the bot
-                player3 = start_processing(board.board, 1, P_TIME, gui)
+                player3 = start_processing(board.board, 1, P_TIME, gui, PLY)
 
                 # update the board with the bots chosen move
                 chosen_move = convert_bit_move(player3[-2])
