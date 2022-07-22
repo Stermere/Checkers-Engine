@@ -16,12 +16,9 @@ import search_engine
 
 
 # calls the board search algorithm and parses the results to the GUI 
-def start_search(board : list, player : int, p_time : int, return_dict): 
+def start_search(board : list, player : int, p_time : int, ply : int, return_dict): 
     p1, p2, p1k, p2k = convert_to_bitboard(board)
-    # a depth of 25 is not likly to be hit by the search at the time of writing but if we do hit it
-    # we will need to increase the depth here
-    p_depth = 50;
-    results = search_engine.search_position(p1, p2, p1k, p2k, player, p_time, p_depth)
+    results = search_engine.search_position(p1, p2, p1k, p2k, player, p_time, ply)
 
     # update the return dict (stops montycarlo if a search is terminated before the time constraint)
     return_dict["depth"] = results[-1][0]
@@ -34,7 +31,7 @@ def start_search(board : list, player : int, p_time : int, return_dict):
 
 
 # start the processing of the minimax tree search on a new thread to allow the GUI to run
-def start_processing(board : list, state : int, p_time, gui: object):
+def start_processing(board : list, state : int, p_time, gui: object, ply : int):
     manager = mp.Manager()
     return_dict = manager.dict()
 
@@ -47,7 +44,7 @@ def start_processing(board : list, state : int, p_time, gui: object):
     return_dict["hashes"] = 0
 
     # prepare the process
-    minmax = mp.Process(target=start_search, args=(board, state, p_time, return_dict, ))
+    minmax = mp.Process(target=start_search, args=(board, state, p_time, ply, return_dict, ))
 
     # start the processes
     minmax.start()
@@ -76,16 +73,18 @@ def start_processing(board : list, state : int, p_time, gui: object):
 def parse_args(args):
     time = 1
     bot = False
+    ply = 52
     if len(args) == 1:
-        return bot, time
-    search_time = args[1]
-    mode = args[2]
+        return bot, time, ply
+    search_time = args[2]
+    mode = args[1]
+    ply = int(args[3])
     if mode == "bot":
         bot = True
     if search_time != "0":
         time = float(search_time)
 
-    return bot, time
+    return bot, time, ply
 
 
 # start the main loop of the game
@@ -104,7 +103,7 @@ def main(args) -> None:
     game_history = []
 
     # pars args
-    BOT_PLAYING, P_TIME = parse_args(args)
+    BOT_PLAYING, P_TIME, PLY = parse_args(args)
 
     # main loop
     while True:
@@ -145,7 +144,7 @@ def main(args) -> None:
         # player 2's turn
         else:
             # the bot
-            player2 = start_processing(board.board, 2, P_TIME, gui)
+            player2 = start_processing(board.board, 2, P_TIME, gui, PLY)
 
             # update the board with the bots chosen move
             chosen_move = convert_bit_move(player2[-2])

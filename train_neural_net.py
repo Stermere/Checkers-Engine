@@ -29,25 +29,11 @@ def game_to_file(game, file_name = "game_data.ds"):
     file = open(file_name, "w")
     # write the game data to the file
     file.write(f"{game[-1]} {game[-2]}\n")
-    num_moves = game[-2]
-    game_winner = game[-1]
-    # randomize the order of the moves
     game = deepcopy(game[:-2])
     
-
+    # write the game data to the file
     for i in range(len(game)):
-        # calculate the true eval at this point
-        if game_winner == 1:
-            eval_ = 10
-            eval_ = eval_ - ((5 / num_moves) * (num_moves - (i + 1)))
-        elif game_winner == 2:
-            eval_ = 0
-            eval_ = eval_ + ((5 / num_moves) * (num_moves - (i + 1)))
-        else:
-            eval_ = 5
-
-        # write the game data to the file
-        file.write(f"{game[i][0]} {game[i][1]} {game[i][2]} {game[i][3]} {eval_}\n")
+        file.write(f"{game[i][0]} {game[i][1]} {game[i][2]} {game[i][3]} {game[i][4]}\n")
     # close the file
     file.close()
 
@@ -69,7 +55,7 @@ def test_neural_net(neural_net_file, data_set_file):
 def play_game(save_list):
     # create a board
     board = Board()
-    search_time = 1.5
+    search_time = 10
     # create a list to store the game data
     game = []
     num_moves = 0
@@ -82,28 +68,33 @@ def play_game(save_list):
     print("Game in progress...")
 
     # while the game is not over
-    while final_state == -1:
-        game.append(convert_to_bitboard(board.board))
-        
+    while final_state == -1:    
         num_moves += 1
 
         # convert the board to a bitboard
         p1, p2, p1k, p2k = convert_to_bitboard(board.board)
 
-        if num_moves <= 6:
+        if num_moves <= 5:
             # if it is we generate a random move
             moves = generate_all_options(board.board, player, False)
             # generate a random move
             best_move = randint(0, len(moves) - 1)
             best_move = moves[best_move]
         
-        # if the game is more than 6 moves we use the search engine to find the best move
+        # if the game is more than 4 moves we use the search engine to find the best move
         else:
             # get the best move
-            best_move = search_engine.search_position(p1, p2, p1k, p2k, player, search_time, 24)
+            best_move = search_engine.search_position(p1, p2, p1k, p2k, player, search_time, 20)
+            eval_ = best_move[-1][-1]
+            depth = best_move[-1][1]
 
             # convert the best move to a matrix move
             best_move = convert_bit_move(best_move[-2])
+
+            # append the move to the game data
+            if depth > 1 and (eval_ > -200 and eval_ < 200):
+                game.append(list(convert_to_bitboard(board.board)))
+                game[-1].append(eval_ + 100)
 
         # update the board
         update_board(best_move[0], best_move[1], board.board)
@@ -214,16 +205,16 @@ def play_n_games(n):
     manager = mp.Manager()
     
     # variable to store the index of the file being written to
-    file_index = 333
+    file_index = 0
 
-    for i in range(n // 8):
+    for i in range(n // 10):
         # create a list to store the game data
         save_list = manager.list()
         # create a list of processes
         processes = []
 
-        # play 8 games
-        for j in range(8):
+        # play 10 games
+        for j in range(10):
             # create a process to play the game
             p = mp.Process(target=play_game, args=(save_list,))
             # start the process
@@ -237,6 +228,7 @@ def play_n_games(n):
             
         # save the game data to a file
         for j in range(len(save_list)):
+            # only save the game if it is not a tie
             game_to_file(save_list[j], "data_set/old_eval/training_data" + str(file_index) + ".ds")
             file_index += 1
 
@@ -319,8 +311,8 @@ def main():
     #print("Data generated! exiting...")
 
     # write the games to a training and testing file
-    #conv_gamefiles_to_ds("data_set/old_eval/training_data", "data_set/data_set", 300, True)
-    #exit(1)
+    #conv_gamefiles_to_ds("data_set/old_eval/training_data", "data_set/data_set", 600, True)
+    #exit(0)
 
     # train the neural network on itself
     #unsupervised_training("neural_net/neural_net", "data_set/self_play_data/game_data", 100, 0.01)
@@ -328,8 +320,8 @@ def main():
     #exit(1)
 
     # play a number of games and save the game data to a file (for bulk data creation)
-    #play_n_games(10000)
-    #exit(0)
+    play_n_games(10000)
+    exit(0)
 
     # test the neural network 
     print("testing neural network...")
@@ -337,8 +329,10 @@ def main():
 
     # train the neural network using the data set
     print("training neural network...")
-    train_neural_net("neural_net/neural_net", "data_set/data_set_train", 64, 0.01)
-        
+    epochs = 64
+    for i in range(epochs):
+        train_neural_net("neural_net/neural_net", "data_set/data_set_train", 1, 0.001)
+        print(abs(test_neural_net("neural_net/neural_net", "data_set/data_set_test")))
 
     # test the neural network on the test data set
     print("testing neural network...")

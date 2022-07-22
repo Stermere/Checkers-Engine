@@ -48,27 +48,42 @@ void populate_input(struct neural_net *net, long long int p1, long long int p2, 
         56, 58, 60, 62,
     };
     int shift_amount;
-    int num_loops = input_layer->num_neurons;
+    int num_loops = 32;
     double input_value;
     for (int i = 0; i < num_loops; i++){
         shift_amount = shift_map[i];
         if (p1 >> shift_amount & 1 == 1){
+            input_layer->neurons[i].output = 1.0;
+            input_layer->neurons[i + 32].output = 0.0;
+            input_layer->neurons[i + 64].output = 0.0;
+            input_layer->neurons[i + 96].output = 0.0;
             input_value = 7.5;
         }
         else if (p2 >> shift_amount & 1 == 1){
+            input_layer->neurons[i].output = 0.0;
+            input_layer->neurons[i + 32].output = 1.0;
+            input_layer->neurons[i + 64].output = 0.0;
+            input_layer->neurons[i + 96].output = 0.0;
             input_value = 2.5;
         }
         else if (p1k >> shift_amount & 1 == 1){
-            input_value = 10.0;
+            input_layer->neurons[i].output = 0.0;
+            input_layer->neurons[i + 32].output = 0.0;
+            input_layer->neurons[i + 64].output = 1.0;
+            input_layer->neurons[i + 96].output = 0.0;
         }
         else if (p2k >> shift_amount & 1 == 1){
-            input_value = 0.0;
+            input_layer->neurons[i].output = 0.0;
+            input_layer->neurons[i + 32].output = 0.0;
+            input_layer->neurons[i + 64].output = 0.0;
+            input_layer->neurons[i + 96].output = 1.0;
         }
         else{
-            input_value = 5.0;
+            input_layer->neurons[i].output = 0.0;
+            input_layer->neurons[i + 32].output = 0.0;
+            input_layer->neurons[i + 64].output = 0.0;
+            input_layer->neurons[i + 96].output = 0.0;
         }
-
-        input_layer->neurons[i].output = input_value;
     }
 }
 
@@ -108,8 +123,10 @@ void update_weights(struct neural_net *net, double learning_rate){
             for (int k = 0; k < current_layer->neurons[j].prev_layer_neurons_num; k++){
                 current_layer->neurons[j].weights[k] -= learning_rate * current_layer->neurons[j].error * prior_layer->neurons[k].output;
             }
-            // update the bias
-            current_layer->neurons[j].bias -= learning_rate * current_layer->neurons[j].error;
+            // update the bias (if it is the last layer dont update the bias)
+            if (i > net->num_layers - 2){
+                current_layer->neurons[j].bias -= learning_rate * current_layer->neurons[j].error;
+            }
         }
         current_layer--;
         prior_layer--;
