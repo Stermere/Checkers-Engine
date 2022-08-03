@@ -124,9 +124,7 @@ void update_weights(struct neural_net *net, double learning_rate){
                 current_layer->neurons[j].weights[k] -= learning_rate * current_layer->neurons[j].error * prior_layer->neurons[k].output;
             }
             // update the bias (if it is the last layer dont update the bias)
-            if (i > net->num_layers - 2){
-                current_layer->neurons[j].bias -= learning_rate * current_layer->neurons[j].error;
-            }
+            current_layer->neurons[j].bias -= learning_rate * current_layer->neurons[j].error * 0.0001;
         }
         current_layer--;
         prior_layer--;
