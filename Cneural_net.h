@@ -118,10 +118,17 @@ void back_propagate(struct neural_net *net, double learning_rate, double *target
 void update_weights(struct neural_net *net, double learning_rate){
     struct layer *current_layer = net->layers + net->num_layers - 1;
     struct layer *prior_layer = current_layer - 1;
+    float lr;
     for (int i = 1; i < net->num_layers; i++){
+        if (i == 1){
+            lr = learning_rate * 0.01;
+        }
+        else{
+            lr = learning_rate;
+        }
         for (int j = 0; j < current_layer->num_neurons; j++){
             for (int k = 0; k < current_layer->neurons[j].prev_layer_neurons_num; k++){
-                current_layer->neurons[j].weights[k] -= learning_rate * current_layer->neurons[j].error * prior_layer->neurons[k].output;
+                current_layer->neurons[j].weights[k] -= lr * current_layer->neurons[j].error * prior_layer->neurons[k].output;
             }
             // update the bias (if it is the last layer dont update the bias)
             current_layer->neurons[j].bias -= learning_rate * current_layer->neurons[j].error * 0.0001;
