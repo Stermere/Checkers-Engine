@@ -24,6 +24,7 @@ struct board_evaler{
     float *king_pos_map;
     long long int nodes;
     int search_depth;
+    int extended_depth;
     struct neural_net *NN_evaler;
     struct hash_table* hash_table;
     struct killer_table* killer_table;
@@ -44,16 +45,17 @@ struct board_evaler* board_evaler_constructor(int search_depth, double time_limi
     evaler->killer_table = init_killer_table(search_depth);
     evaler->start_time = start_time;
     evaler->time_limit = time_limit;
+    evaler->extended_depth = 0;
     return evaler;
 }
 
 // get the evaluation for a board given the board state
 float get_eval(long long p1, long long p2, long long p1k, long long p2k, struct set* piece_loc, struct board_evaler* evaler){
     // there was no entry found so lets calculate it
-    //float eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
+    float eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
 
     // test neural net
-    float eval = (float)get_output(evaler->NN_evaler, p1, p2, p1k, p2k) - 100.0; // neural_net
+    //float eval = (float)get_output(evaler->NN_evaler, p1, p2, p1k, p2k) - 100.0; // neural_net
 
     return eval;
 }
@@ -93,10 +95,10 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
     }
     // give the player with the most pieces a bonus
     if (p1num > p2num){
-        eval += 4.0 / (p1num + p2num);
+        eval += 10.0 / (p1num + p2num);
     }
     else if (p2num > p1num){
-        eval -= 4.0 / (p1num + p2num);
+        eval -= 10.0 / (p1num + p2num);
     }
 
     return eval;
@@ -129,7 +131,7 @@ float* compute_piece_pos_p1(){
         {0, 0, 1, 1, 1, 1, 0, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
         {0, 0, 0, 0, 0, 4, 0, 4},
-        {2, 0, 4, 0, 3, 0, 4, 0}
+        {0, 0, 4, 0, 2, 0, 4, 0}
     };
     for (int i = 0; i < 64; i++){
         eval_table[i] = table[i / 8][i % 8]/ 10.0;
@@ -142,7 +144,7 @@ float* compute_piece_pos_p2(){
     float *eval_table = (float*)malloc(sizeof(float) * 64);
     // mirror the table
     float table[8][8] = { 
-        {0, 4, 0, 3, 0, 4, 0, 2},
+        {0, 4, 0, 2, 0, 4, 0, 0},
         {4, 0, 4, 0, 0, 0, 0, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},

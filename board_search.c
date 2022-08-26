@@ -131,7 +131,7 @@ static PyObject* search_position(PyObject *self, PyObject *args){
     PyList_Append(py_list, py_tuple);
 
     // get some stats about the search
-    py_tuple = Py_BuildValue("KKKf", board_info->evaler->search_depth, board_info->evaler->nodes, board_info->evaler->hash_table->num_entries, best_move->eval);
+    py_tuple = Py_BuildValue("KKKf", board_info->evaler->extended_depth, board_info->evaler->nodes, board_info->evaler->hash_table->num_entries, best_move->eval);
     PyList_Append(py_list, py_tuple);
 
     // free the search tree the evaler and the transposition table
@@ -701,6 +701,10 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     struct board_data* temp_board;
     evaler->nodes++;
 
+    if (depth_abs > evaler->extended_depth){
+        evaler->extended_depth = depth_abs;
+    }
+
     // if nodes is divisible by 10000, check the time
     if (evaler->nodes % 10000 == 0 && evaler->nodes != 0){
         clock_t current_time = clock();
@@ -720,8 +724,17 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         // if it is not the entry will still be used for move ordering
         if (table_entry->age == evaler->search_depth && table_entry->depth <= depth_abs){
             if (table_entry->node_type == PV_NODE){
-                best_moves->eval = table_entry->eval;
-                return table_entry->eval;
+                if (depth_abs > 3){
+                    if (table_entry->eval >= beta)
+                        return table_entry->eval;
+                    if (table_entry->eval <= alpha)
+                        return table_entry->eval;
+                    if (depth_abs < evaler->search_depth * 2)
+                        depth = depth + 1;
+                }
+                else{
+                    return table_entry->eval;
+                }
             }
             else if (table_entry->node_type == FAIL_HIGH){
                 max_eval = table_entry->eval;
@@ -992,6 +1005,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     clock_t start, end;
     double cpu_time_used;
     int depth;
+    int extended_depth;
     int terminate = 0;
     start = clock();
     evaler->start_time = start;
@@ -1009,11 +1023,17 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         if (eval_ == INFINITY){
             terminate = 1;
             evaler->search_depth = depth;
+            evaler->extended_depth = extended_depth;
             break;
         }
-        depth = i;
 
-        printf("\rEval: %f, \tDepth: %d", eval_, depth);
+        depth = i;
+        extended_depth = evaler->extended_depth;
+        if (depth > extended_depth){
+            extended_depth = depth;
+        }
+        
+        printf("\rPLY: %d\t PLYEX: %d\t Eval: %f", depth, evaler->extended_depth, eval_);
         // get the end time
         end = clock();
         cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -1040,8 +1060,8 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
 
         }
     }
-
-    printf("\r                                          \r"); // clear the output from the progress indicator
+    // clear the output from the progress indicator (there has to be a better way to do this right?)
+    printf("\r                                                           \r");
 
     // print the line of best moves to the terminal (deguggigng)
     //print_line(p1, p2, p1k, p2k, best_moves, depth);
@@ -1053,7 +1073,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     printf("boards searched: %lld\n", evaler->nodes);
     printf("search time: %f\n", cpu_time_used);
     SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
-    printf("search depth: %d\n", depth);
+    printf("search depth: %d\n", evaler->extended_depth);
     printf("best_eval: %f\n\n", best_moves_clone->eval);
 
     // set the text color to white
