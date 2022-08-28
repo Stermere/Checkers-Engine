@@ -38,7 +38,7 @@ struct board_evaler* board_evaler_constructor(int search_depth, double time_limi
     evaler->piece_pos_map_p2 = compute_piece_pos_p2();
     evaler->king_pos_map = compute_king_pos();
     evaler->nodes = 0ll;
-    evaler->NN_evaler = load_network_from_file("neural_net/neural_net");
+    //evaler->NN_evaler = load_network_from_file("neural_net/neural_net");
     // prepare a table of size 8,388,608 
     long long int hash_table_size = 1 << 23;
     evaler->hash_table = init_hash_table(hash_table_size);
@@ -99,6 +99,32 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
     }
     else if (p2num > p1num){
         eval -= 10.0 / (p1num + p2num);
+    }
+
+    // give a bonus to players with structures on the board that are often good
+    if (p1 & 0x1408000000000000 ^ 0x1408000000000000){
+        eval += 0.25;
+    }
+    if (p2 & 0x1028 ^ 0x1028){
+        eval -= 0.25;
+    }
+    if (p1 & 0x40a0000000000000 ^ 0x40a0000000000000){
+        eval += 0.25;
+    }
+    if (p2 & 0x502 ^ 0x502){
+        eval -= 0.25;
+    }
+    if (p1 & 0x10201000000 ^ 0x10201000000){
+        eval += 0.25;
+    }
+    if (p2 & 0x8040800000 ^ 0x8040800000){
+        eval -= 0.25;
+    }
+    if (p1 & 0x4400000000000000 ^ 0x4400000000000000){
+        eval += 0.25;
+    }
+    if (p2 & 0x22 ^ 0x22){
+        eval -= 0.25;
     }
 
     return eval;
