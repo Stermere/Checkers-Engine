@@ -353,7 +353,7 @@ void sort_moves(struct board_data* ptr, int player){
             board_data_list[i].eval = board_data_list[i].eval * -1;
         }
     }
-    // use the quicksort algorithm to sort the moves
+    // use the merge-sort algorithm to sort the moves
     merge_sort(board_data_list, ptr->num_moves);
 
     // undo the multiplication by the player variable
@@ -364,7 +364,7 @@ void sort_moves(struct board_data* ptr, int player){
     }
 }
 
-// the quicksort recursive funtion
+// the mergesort recursive funtion
 // takes the pointer to the board_data array and the number of elements in the array
 void merge_sort(struct board_data* ptr, int num_elements){
     // base case
@@ -730,7 +730,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
                     if (table_entry->eval <= alpha)
                         return table_entry->eval;
                     if (depth_abs < evaler->search_depth * 2)
-                        depth = depth + 1;
+                        depth = depth + 2;
                 }
                 else{
                     return table_entry->eval;
@@ -755,8 +755,8 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         }
     }
     // check if the moves are being repeated in this line of moves and if so evaluate this as a draw and return
-    //if (best_moves->parent->parent->parent->parent->hash == hash)
-    //    return 0.0;
+    if (best_moves->parent->parent->parent->parent->hash == hash)
+        return 0.0;
 
     // if the depth is 0 then we are at the end of the standard search so begin the captures search
     if (depth < 0){
@@ -845,20 +845,20 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     // depending on the node number reduce the depth of the search as only the first few nodes are important
     // this is done to avoid the search taking too long and to try and increase the depth of the search
     // dy reducing depth of moves that fall below the mid point of alpha and beta will further reduce this
-    if (depth_abs > 3){
+    if (depth_abs > 6){
         if (player == 1){
             if (best_moves->eval < (alpha + beta) * 0.5){
-                depth = depth - 1;
+                depth = depth - 2;
             }
         }
         else if (player == 2){
             if (best_moves->eval > (alpha + beta) * 0.5){
-                depth = depth - 1;
+                depth = depth - 2;
             }
         }
     }
 
-    if (depth_abs > 3 && node_num > 2){
+    if (depth_abs > 6 && node_num > 2){
         depth -= 1;
     }
 

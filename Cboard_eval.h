@@ -95,36 +95,18 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
     }
     // give the player with the most pieces a bonus
     if (p1num > p2num){
-        eval += 10.0 / (p1num + p2num);
+        eval += 0.3f * (p1num - p2num);
     }
     else if (p2num > p1num){
-        eval -= 10.0 / (p1num + p2num);
+        eval -= 0.3f * (p2num - p1num);
     }
 
     // give a bonus to players with structures on the board that are often good
-    if (p1 & 0x1408000000000000 ^ 0x1408000000000000){
-        eval += 0.25;
+    if (p1 & 0x4400000000000000 ^ 0x4400000000000000 == 0){
+        eval += 1.0f;
     }
-    if (p2 & 0x1028 ^ 0x1028){
-        eval -= 0.25;
-    }
-    if (p1 & 0x40a0000000000000 ^ 0x40a0000000000000){
-        eval += 0.25;
-    }
-    if (p2 & 0x502 ^ 0x502){
-        eval -= 0.25;
-    }
-    if (p1 & 0x10201000000 ^ 0x10201000000){
-        eval += 0.25;
-    }
-    if (p2 & 0x8040800000 ^ 0x8040800000){
-        eval -= 0.25;
-    }
-    if (p1 & 0x4400000000000000 ^ 0x4400000000000000){
-        eval += 0.25;
-    }
-    if (p2 & 0x22 ^ 0x22){
-        eval -= 0.25;
+    if (p2 & 0x22 ^ 0x22 == 0){
+        eval -= 1.0f;
     }
 
     return eval;
@@ -195,10 +177,10 @@ float* compute_king_pos(){
         float init_table[8][8] = {
         {0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 3, 3, 3, 3, 0, 0}, 
-        {0, 0, 3, 3, 3, 3, 0, 0}, 
-        {0, 0, 3, 3, 3, 3, 0, 0}, 
-        {0, 0, 3, 3, 3, 3, 0, 0}, 
+        {0, 0, 1, 1, 1, 1, 0, 0}, 
+        {0, 0, 1, 1, 1, 1, 0, 0}, 
+        {0, 0, 1, 1, 1, 1, 0, 0}, 
+        {0, 0, 1, 1, 1, 1, 0, 0}, 
         {0, 0, 0, 0, 0, 0, 0, 0}, 
         {0, 0, 0, 0, 0, 0, 0, 0}
         };
