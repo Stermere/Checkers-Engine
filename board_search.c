@@ -52,7 +52,7 @@ unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong 
 struct board_data* get_best_move(struct board_data *head, int player);
 void end_board_search(struct board_data* best_moves, struct board_evaler* evaler);
 int free_board_data(struct board_data* data);
-void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_data* head, int depth);
+void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_data* head);
 
 // for some reason this has to be above the python stuff even if it is defined, otherwise it doesn't work
 
@@ -685,6 +685,33 @@ int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, in
     return num_moves;
 }
 
+// a function that decides if a search should be extended or reduced at a certain node
+int should_extend_or_reduce(int depth, int depth_abs, int node_num, int num_moves,
+                            int player, int alpha, int beta, struct hash_table_entry* table_entry,
+                            struct board_evaler* evaler){
+    // if the depth is to great reduce it to less than 0
+    if (depth_abs >= evaler->max_depth){
+        return -100;
+    }
+    // if the hash entry is empty return 0
+    if (table_entry == NULL){
+        return depth;
+    }
+
+    // if the type of node is a cut node return 0
+    if (table_entry->node_type != PV_NODE){
+        return depth;
+    }
+    // if the real depth is greater than 6 then begin prunning late moves
+    if (depth_abs > 6){
+        // if the node number is greater than 3 and  return -1
+        if (node_num > 3){
+            return depth - 1;
+        }
+    }
+    return depth;
+}
+
 // search the board for the best move recursivly and return the best eval that can be achived from that board position
 // the best_moves struct will be populated to the search depth at the end of this search
 float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
@@ -700,6 +727,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     unsigned long long int next_hash;
     struct board_data* temp_board;
     evaler->nodes++;
+    evaler->avg_depth += depth_abs;
 
     if (depth_abs > evaler->extended_depth){
         evaler->extended_depth = depth_abs;
@@ -724,17 +752,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         // if it is not the entry will still be used for move ordering
         if (table_entry->age == evaler->search_depth && table_entry->depth <= depth_abs){
             if (table_entry->node_type == PV_NODE){
-                if (depth_abs > 3){
-                    if (table_entry->eval >= beta)
-                        return table_entry->eval;
-                    if (table_entry->eval <= alpha)
-                        return table_entry->eval;
-                    if (depth_abs < evaler->search_depth * 2)
-                        depth = depth + 2;
-                }
-                else{
-                    return table_entry->eval;
-                }
+                return table_entry->eval;
             }
             else if (table_entry->node_type == FAIL_HIGH){
                 max_eval = table_entry->eval;
@@ -754,6 +772,11 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             }
         }
     }
+
+    // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions
+    depth = should_extend_or_reduce(depth, depth_abs, node_num, num_moves, player, alpha, beta, table_entry, evaler);
+
+
     // check if the moves are being repeated in this line of moves and if so evaluate this as a draw and return
     if (best_moves->parent->parent->parent->parent->hash == hash)
         return 0.0;
@@ -842,27 +865,6 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         }
     }
 
-    // depending on the node number reduce the depth of the search as only the first few nodes are important
-    // this is done to avoid the search taking too long and to try and increase the depth of the search
-    // dy reducing depth of moves that fall below the mid point of alpha and beta will further reduce this
-    if (depth_abs > 10){
-        if (player == 1){
-            if (best_moves->eval < beta){
-                depth = depth - 2;
-            }
-        }
-        else if (player == 2){
-            if (best_moves->eval > alpha){
-                depth = depth - 2;
-            }
-        }
-    }
-
-    if (depth_abs > 6 && node_num > 2){
-        depth -= 1;
-    }
-
-
     // the childer nodes are now ready to be searched so begin the search
     short best_move = NO_MOVE;
     short refutation_move = NO_MOVE;
@@ -890,17 +892,9 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         }
 
         // call the function recursivly 
-        // if the player is the same do not change the depth
-        int depth_next = depth;
-        int depth_abs_next = depth_abs;
-        if (player_next != player){
-            depth_next--;
-            depth_abs_next++;
-        }
-    
-        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
+        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth - 1,
                                         alpha, beta, captures_only, temp_board, evaler, next_hash,
-                                        depth_abs_next, search_type, i);
+                                        depth_abs + 1, search_type, i);
 
         // if the eval is infinity the search is trying to end so return
         if (temp_board->eval == INFINITY){
@@ -976,7 +970,6 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     return board_eval;
 }
 
-
 // prepare needed memory for a search and call the search function to find the best move and return a pointer to the memory 
 // location that holds the moves for the board ordered in the order best to worst
 struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth){
@@ -1016,6 +1009,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
         // update the evalers search depth
         evaler->search_depth = i;
+        evaler->max_depth = i + 1;
 
         eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0,
                              best_moves, evaler, hash, 0, SEARCH_TYPE_NORMAL, 0);
@@ -1074,13 +1068,14 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     printf("search time: %f\n", cpu_time_used);
     SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
     printf("search depth: %d\n", evaler->extended_depth);
+    printf("average node depth: %f\n", (float)evaler->avg_depth / (float)evaler->nodes);
     printf("best_eval: %f\n\n", best_moves_clone->eval);
 
     // set the text color to white
     SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
 
     // print the line of best moves to the terminal (deguggigng)
-    //print_line(p1, p2, p1k, p2k, best_moves, depth);
+    //print_line(p1, p2, p1k, p2k, best_moves);
 
     // free the board_tree (since the one ply clone is sent back)
     free_board_data(best_moves);
@@ -1173,41 +1168,44 @@ long long n_ply_search(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int
 
 // print the board to standard out in a human readable format (for debugging)
 void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k){
-    // loop over all the pieces and print them out
-    for (int i = 0; i < 64; i++){
-        int piece_type = get_piece_at_location(p1, p2, p1k, p2k, i);
-        if (piece_type == 1){
-            printf("1 ");
-        } else if (piece_type == 2){
-            printf("2 ");
-        } else if (piece_type == 3){
-            printf("3 ");
-        } else if (piece_type == 4){
-            printf("4 ");
-        } else {
-            printf("- ");
+    printf("  0 1 2 3 4 5 6 7 \n");
+    for (int row = 0; row < 8; row++){
+        printf("%d ", row);
+        for (int col = 0; col < 8; col++){
+            int piece = get_piece_at_location(p1, p2, p1k, p2k, (row * 8) + col);
+            if (piece == 0){
+                printf("  ");
+            }
+            else if (piece == 1){
+                printf("o ");
+            }
+            else if (piece == 2){
+                printf("x ");
+            }
+            else if (piece == 3){
+                printf("O ");
+            }
+            else if (piece == 4){
+                printf("X ");
+            }
         }
-        if ((i + 1) % 8 == 0){
-            printf("\n");
-        }
+        printf("\n");
     }
-    printf("\n");
 }
 
 // print the expected line to standard out in a human readable format (for debugging)
-void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_data* head, int depth){
+void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_data* head){
     // print the line that the bot expects to happen
     struct board_data *temp_board = head;
     struct board_data *temp_temp_board;
     float eval_temp = 0;
-    for (int t = 0; t < depth - 1; t++){
+    while (1){
         update_board(&p1, &p2, &p1k, &p2k, temp_board->move_start, temp_board->move_end);
-
-        // print the board and eval data
-        printf("eval: %f\n", temp_board->eval);
-
-        human_readble_board(p1, p2, p1k, p2k);
+        human_readble_board(p1, p2, p1k, p2k); // print the board
         if (temp_board->player == 1){
+            if (temp_board->next_boards == NULL || temp_board->num_moves == 0){
+                return;
+            }
             temp_temp_board = temp_board->next_boards;
             eval_temp = temp_temp_board->eval; 
             for (int i = 0 ; i < temp_board->num_moves; i++){
@@ -1218,6 +1216,9 @@ void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_d
             }
         }
         else if (temp_board->player == 2){
+            if (temp_board->next_boards == NULL || temp_board->num_moves == 0){
+                return;
+            }
             temp_temp_board = temp_board->next_boards;
             eval_temp = temp_temp_board->eval; 
             for (int i = 0 ; i < temp_board->num_moves; i++){

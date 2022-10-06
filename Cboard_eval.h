@@ -22,14 +22,19 @@ struct board_evaler{
     float *piece_pos_map_p1;
     float *piece_pos_map_p2;
     float *king_pos_map;
-    long long int nodes;
     int search_depth;
-    int extended_depth;
+    int max_depth;
     struct neural_net *NN_evaler;
     struct hash_table* hash_table;
     struct killer_table* killer_table;
     clock_t start_time;
     double time_limit;
+
+    // keep some interesting data
+    long long int nodes;
+    long long int avg_depth;
+    int extended_depth;
+
 };
 
 struct board_evaler* board_evaler_constructor(int search_depth, double time_limit, clock_t start_time){
