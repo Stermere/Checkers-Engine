@@ -74,15 +74,6 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, float
             return;
             }
     }
-    // if the eval is a mate score, convert it to a mate score retalive to the node depth
-    if (eval < -899.0 || eval > 899.0){
-        if (eval < -899.0){
-            eval -= depth;
-        }
-        else{
-            eval += depth;
-        }
-    }
     // if the entry is empty or the value stored is deamed less relevant add the new entry at the old entrys location
     entry_index->hash = hash;
     entry_index->eval = eval;
