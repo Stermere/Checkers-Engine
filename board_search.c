@@ -1068,7 +1068,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     printf("search time: %f\n", cpu_time_used);
     SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
     printf("search depth: %d\n", evaler->extended_depth);
-    printf("average node depth: %f\n", (float)evaler->avg_depth / (float)evaler->nodes);
+    printf("average node depth: %lld\n", evaler->avg_depth / evaler->nodes);
     printf("best_eval: %f\n\n", best_moves_clone->eval);
 
     // set the text color to white
