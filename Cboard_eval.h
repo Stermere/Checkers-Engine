@@ -96,9 +96,17 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
     // give the player with the most pieces a bonus
     if (p1num > p2num){
         eval += (20.0f * (p1num - p2num)) / (p1num + p2num);
+        if (p2num < 3)
+            eval += 20.0f;
+        if (p2num < 2)
+            eval -= 40.0f;
     }
     else if (p2num > p1num){
         eval -= (20.0f * (p2num - p1num)) / (p1num + p2num);
+        if (p1num < 3)
+            eval -= 20.0f;
+        else if (p1num < 2)
+            eval -= 40.0f;
     }
 
     // give a bonus to players with structures on the board that are often good
