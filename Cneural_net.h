@@ -53,7 +53,7 @@ void populate_input(struct neural_net *net, long long int p1, long long int p2, 
     for (int i = 0; i < num_loops; i++){
         shift_amount = shift_map[i];
         if (p1 >> shift_amount & 1 == 1){
-            input_layer->neurons[i].output = 1.0;
+            input_layer->neurons[i].output = 10.0;
             input_layer->neurons[i + 32].output = 0.0;
             input_layer->neurons[i + 64].output = 0.0;
             input_layer->neurons[i + 96].output = 0.0;
@@ -61,7 +61,7 @@ void populate_input(struct neural_net *net, long long int p1, long long int p2, 
         }
         else if (p2 >> shift_amount & 1 == 1){
             input_layer->neurons[i].output = 0.0;
-            input_layer->neurons[i + 32].output = 1.0;
+            input_layer->neurons[i + 32].output = 10.0;
             input_layer->neurons[i + 64].output = 0.0;
             input_layer->neurons[i + 96].output = 0.0;
             input_value = 2.5;
@@ -69,14 +69,14 @@ void populate_input(struct neural_net *net, long long int p1, long long int p2, 
         else if (p1k >> shift_amount & 1 == 1){
             input_layer->neurons[i].output = 0.0;
             input_layer->neurons[i + 32].output = 0.0;
-            input_layer->neurons[i + 64].output = 1.0;
+            input_layer->neurons[i + 64].output = 10.0;
             input_layer->neurons[i + 96].output = 0.0;
         }
         else if (p2k >> shift_amount & 1 == 1){
             input_layer->neurons[i].output = 0.0;
             input_layer->neurons[i + 32].output = 0.0;
             input_layer->neurons[i + 64].output = 0.0;
-            input_layer->neurons[i + 96].output = 1.0;
+            input_layer->neurons[i + 96].output = 10.0;
         }
         else{
             input_layer->neurons[i].output = 0.0;
@@ -105,34 +105,35 @@ void back_propagate(struct neural_net *net, double learning_rate, double *target
                 error += error_relu_hidden(output_layer->neurons[k].weights[j], output_layer->neurons[k].error, current_layer->neurons[j].output);
             }
             error = error / current_layer->num_neurons;
-            current_layer->neurons[j].error = error;
+            current_layer->neurons[j].error += error;
         }
         current_layer--;
         output_layer--;
     }
-    // then update the weights
-    update_weights(net, learning_rate);
 }
 
 // update the weights after running backpropagation
-void update_weights(struct neural_net *net, double learning_rate){
+void update_weights(struct neural_net *net, double learning_rate, int batch_size){
     struct layer *current_layer = net->layers + net->num_layers - 1;
     struct layer *prior_layer = current_layer - 1;
     float lr;
     for (int i = 1; i < net->num_layers; i++){
         if (i == 1){
-            lr = learning_rate * 0.01;
+            lr = learning_rate * 0.1;
         }
         else{
             lr = learning_rate;
         }
         for (int j = 0; j < current_layer->num_neurons; j++){
             for (int k = 0; k < current_layer->neurons[j].prev_layer_neurons_num; k++){
-                current_layer->neurons[j].weights[k] -= lr * current_layer->neurons[j].error * prior_layer->neurons[k].output;
+                current_layer->neurons[j].weights[k] -= lr * (current_layer->neurons[j].error / batch_size) * prior_layer->neurons[k].output;
+                current_layer->neurons[j].error = 0.0;
             }
             // update the bias (if it is the last layer dont update the bias)
-            current_layer->neurons[j].bias -= learning_rate * current_layer->neurons[j].error * 0.0001;
+            current_layer->neurons[j].bias -= learning_rate * (current_layer->neurons[j].error / batch_size) * 0.1;
+            current_layer->neurons[j].error = 0.0;
         }
+
         current_layer--;
         prior_layer--;
     }

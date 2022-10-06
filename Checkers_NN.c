@@ -22,13 +22,14 @@ static PyObject* train_net(PyObject *self, PyObject *args){
     char* train_file = &train_file_arr[0];
 
     int epochs;
+    int batch_size;
     double learning_rate;
 
     Py_buffer* net_buf = (Py_buffer*)malloc(sizeof(Py_buffer));
     Py_buffer* train_buf = (Py_buffer*)malloc(sizeof(Py_buffer));
 
     // get the arguments from python
-    if (!PyArg_ParseTuple(args, "s*s*id", net_buf, train_buf, &epochs, &learning_rate)){
+    if (!PyArg_ParseTuple(args, "s*s*iid", net_buf, train_buf, &batch_size, &epochs, &learning_rate)){
         return NULL;
     }
 
@@ -42,7 +43,7 @@ static PyObject* train_net(PyObject *self, PyObject *args){
     struct data_set* data = load_data_set_from_file(train_file);
 
     double error;
-    error = train_network(net, data, epochs, learning_rate, net_file);
+    error = train_network(net, data, epochs, learning_rate, batch_size, net_file);
 
     save_network_to_file(net, net_file);
 
@@ -157,24 +158,35 @@ PyInit_checkers_NN(void){
 // takes in a neural network, a loaded data set, epochs, learning rate and a file to save the model to
 // Models are saved to a file after training is complete
 // assumes one output neuron
-double train_network(struct neural_net *net, struct data_set *data, int epochs, double learning_rate, char *filename){
+double train_network(struct neural_net *net, struct data_set *data, int epochs, double learning_rate, int batch_size, char *filename){
     double error;
+    double error_final = 0;
 
     for (int i = 0; i < epochs; i++){
         error = 0;
+        
         // shuffle the data set
         shuffle_data_set(data);
-        for (int j = 0; j < data->move_num; j++){
+        
+        // only train on a random subset of the data that is batch size
+        int rand_start = rand() % (data->move_num - batch_size);
+        int rand_end = rand_start + batch_size;
+
+        for (int j = rand_start; j < rand_end; j++){
             populate_input(net, data->game_data[j].p1, data->game_data[j].p2, data->game_data[j].p1k, data->game_data[j].p2k);
             forward_propagate(net);
             back_propagate(net, learning_rate, &data->game_data[j].true_eval);
             error += abs(error_relu_out(net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval));
+            
+            // update the weights
+            update_weights(net, learning_rate, batch_size);
 
         }
-        error = error / data->move_num;
+        error_final += error / batch_size;
+        error = 0;
     }
     save_network_to_file(net, filename);
-    return error;
+    return error_final / epochs;
 }
 
 // function to test the neural network using a preloaded network and a test file
