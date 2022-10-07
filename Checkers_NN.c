@@ -178,10 +178,10 @@ double train_network(struct neural_net *net, struct data_set *data, int epochs, 
             back_propagate(net, learning_rate, &data->game_data[j].true_eval);
             error += abs(error_relu_out(net->layers[net->num_layers - 1].neurons[0].output, data->game_data[j].true_eval));
             
-            // update the weights
-            update_weights(net, learning_rate, batch_size);
 
         }
+        // update the weights
+        update_weights(net, learning_rate, batch_size);
         error_final += error / batch_size;
         error = 0;
     }
