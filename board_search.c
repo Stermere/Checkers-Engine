@@ -1071,15 +1071,13 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_INTENSITY);
     printf("Search Results:\n");
     SetConsoleTextAttribute(hStdOut, FOREGROUND_GREEN);
-    printf("hashes stored: %lld\n", evaler->hash_table->num_entries);
-    printf("boards searched: %lld\n", evaler->nodes);
-    printf("search time: %f\n", cpu_time_used);
+    printf("Hashes stored: %lld\n", evaler->hash_table->num_entries);
+    printf("Nodes: %lld\n", nodes);
+    printf("Time: %fs\n", cpu_time_used);
     SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
-    printf("search depth: %d\n", evaler->extended_depth);
-    printf("average node depth: %lld\n", avg_depth / nodes);
-    // print the avg nodes and avg depth
-    SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_INTENSITY);
-    printf("best_eval: %f\n\n", best_moves_clone->eval);
+    printf("Depth: %d\n", evaler->extended_depth);
+    printf("Avg depth: %lld\n", avg_depth / nodes);
+    printf("Eval: %f\n\n", best_moves_clone->eval);
 
     // set the text color to white
     SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
