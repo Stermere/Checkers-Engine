@@ -40,6 +40,7 @@ struct hash_table {
     struct hash_table_entry *table;
     long long int size;
     int num_entries;
+    int pv_retrival_count;
     unsigned long long int* piece_hash_diff;
 };
 
@@ -113,6 +114,14 @@ struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long 
                 entry_index->eval -= depth;
             }
         }
+        // incriment the pv retrival count if relevent
+        if (entry_index->node_type == PV_NODE){
+            table->pv_retrival_count++;
+        }
+        else {
+            table->pv_retrival_count = 0;
+        }
+
         // return the entry
         return entry_index;
     }

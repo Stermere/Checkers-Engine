@@ -693,22 +693,28 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int num_move
     if (depth_abs >= evaler->max_depth){
         return -100;
     }
+
+    // PV line extension
+    if (evaler->hash_table->pv_retrival_count >= 2){
+        return depth + 1;
+    }
+
+    // late move reduction
+    if (depth_abs > 8){
+        // if the node number is greater than 3 and  return -1
+        if (node_num > 4){
+            return depth - 2;
+        }
+        else if (node_num > 2){
+            return depth - 1;
+        }
+    }
+
     // if the hash entry is empty return 0
     if (table_entry == NULL){
         return depth;
     }
 
-    // if the type of node is a cut node return 0
-    if (table_entry->node_type != PV_NODE){
-        return depth;
-    }
-    // if the real depth is greater than 6 then begin prunning late moves
-    if (depth_abs > 6){
-        // if the node number is greater than 3 and  return -1
-        if (node_num > 3){
-            return depth - 1;
-        }
-    }
     return depth;
 }
 
@@ -729,7 +735,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     evaler->nodes++;
     evaler->avg_depth += depth_abs;
 
-    if (depth_abs > evaler->extended_depth){
+    if (depth_abs > evaler->extended_depth && depth > 0){
         evaler->extended_depth = depth_abs;
     }
 
@@ -782,12 +788,12 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         return 0.0;
 
     // if the depth is 0 then we are at the end of the standard search so begin the captures search
-    if (depth < 0){
+    if (depth <= 0){
         captures_only = True;
     }
 
     // get the moves for this board and player combo or use the moves generated from the last depth search
-    if (best_moves->num_moves == -1){
+    if (best_moves->num_moves == -1 || captures_only){
         int moves[96];
         num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, offsets, captures_only);
         // put all the moves into the best moves struct and fill this layer of the tree to the extent that we can
@@ -999,6 +1005,8 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     double cpu_time_used;
     int depth;
     int extended_depth;
+    long long int nodes = 0;
+    long long int avg_depth = 0;
     int terminate = 0;
     start = clock();
     evaler->start_time = start;
@@ -1009,7 +1017,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
         // update the evalers search depth
         evaler->search_depth = i;
-        evaler->max_depth = i + 1;
+        evaler->max_depth = i + 20;
 
         eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0,
                              best_moves, evaler, hash, 0, SEARCH_TYPE_NORMAL, 0);
@@ -1051,6 +1059,8 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
             best_moves_clone->next_boards[j] = best_moves->next_boards[j];
             best_moves_clone->eval = best_moves->eval;
             best_moves_clone->player = best_moves->player;
+        avg_depth = evaler->avg_depth;
+        nodes = evaler->nodes;
 
         }
     }
@@ -1068,7 +1078,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     printf("search time: %f\n", cpu_time_used);
     SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
     printf("search depth: %d\n", evaler->extended_depth);
-    printf("average node depth: %lld\n", evaler->avg_depth / evaler->nodes);
+    printf("average node depth: %lld\n", avg_depth / nodes);
     printf("best_eval: %f\n\n", best_moves_clone->eval);
 
     // set the text color to white
