@@ -695,17 +695,14 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int num_move
     }
 
     // PV line extension
-    if (evaler->hash_table->pv_retrival_count >= 2){
+    if (evaler->hash_table->pv_retrival_count % 4 == 2 && depth_abs > 5){
         return depth + 1;
     }
 
     // late move reduction
-    if (depth_abs > 8){
+    if (depth_abs > 5){
         // if the node number is greater than 3 and  return -1
         if (node_num > 4){
-            return depth - 2;
-        }
-        else if (node_num > 2){
             return depth - 1;
         }
     }
@@ -1017,7 +1014,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
         // update the evalers search depth
         evaler->search_depth = i;
-        evaler->max_depth = i + 20;
+        evaler->max_depth = i + 15;
 
         eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0,
                              best_moves, evaler, hash, 0, SEARCH_TYPE_NORMAL, 0);
@@ -1059,10 +1056,11 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
             best_moves_clone->next_boards[j] = best_moves->next_boards[j];
             best_moves_clone->eval = best_moves->eval;
             best_moves_clone->player = best_moves->player;
+        }
         avg_depth = evaler->avg_depth;
         nodes = evaler->nodes;
-
-        }
+        evaler->avg_depth = 0;
+        evaler->nodes = 0;
     }
     // clear the output from the progress indicator (there has to be a better way to do this right?)
     printf("\r                                                           \r");
@@ -1079,6 +1077,8 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
     printf("search depth: %d\n", evaler->extended_depth);
     printf("average node depth: %lld\n", avg_depth / nodes);
+    // print the avg nodes and avg depth
+    SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_INTENSITY);
     printf("best_eval: %f\n\n", best_moves_clone->eval);
 
     // set the text color to white
