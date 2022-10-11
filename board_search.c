@@ -694,22 +694,36 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int num_move
         return -100;
     }
 
-    // PV line extension
-    if (evaler->hash_table->pv_retrival_count % 4 == 2 && depth_abs > 5){
+    // if the node is a horizon node, leave it alone
+    if (depth <= 3) {
+        return depth;
+    }
+
+    // extract the node type from the table entry
+    int node_type = HORIZON_NODE;
+    if (table_entry != NULL){
+        node_type = table_entry->node_type;
+    }
+
+    // if the move is forcing extend it 
+    if (num_moves == 1){
         return depth + 1;
     }
 
-    // late move reduction
-    if (depth_abs > 5){
-        // if the node number is greater than 3 and  return -1
-        if (node_num > 4){
-            return depth - 1;
-        }
+    // PV line extension
+    if (evaler->hash_table->pv_retrival_count % 4 == 2 && depth_abs > 3 && node_num == 0){
+        return depth + 1;
     }
 
-    // if the hash entry is empty return 0
-    if (table_entry == NULL){
-        return depth;
+    // if the node is a PV node extend the first move and reduce the rest
+    if (node_type == PV_NODE && node_num >= 1 && depth_abs > 3){
+        depth -= 1;
+    }
+
+    // late move reduction
+    if (depth_abs > 5 && node_num > 2){
+        // if the node number is greater than 2 and  return -1
+        depth -= 1;
     }
 
     return depth;
@@ -775,10 +789,6 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             }
         }
     }
-
-    // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions
-    depth = should_extend_or_reduce(depth, depth_abs, node_num, num_moves, player, alpha, beta, table_entry, evaler);
-
 
     // check if the moves are being repeated in this line of moves and if so evaluate this as a draw and return
     if (best_moves->parent->parent->parent->parent->hash == hash)
@@ -894,10 +904,67 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             temp_board->player = player_next;
         }
 
-        // call the function recursivly 
-        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth - 1,
-                                        alpha, beta, captures_only, temp_board, evaler, next_hash,
-                                        depth_abs + 1, search_type, i);
+        // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions
+        int depth_next = should_extend_or_reduce(depth, depth_abs, i, num_moves, player, alpha, beta, table_entry, evaler) - 1;
+
+        /////////////////////////// TODO move this to a function 
+
+        // if this nodes is a PV-node then the first child should be searched with a full window and the rest with a hard alpha beta window
+        if (table_entry != NULL) {
+            if (table_entry->node_type == PV_NODE) {
+                if (player == 1){
+                    if (i == 0){
+                        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
+                                                alpha, beta, captures_only, temp_board, evaler, next_hash,
+                                                depth_abs + 1, search_type, i);
+                    }
+                    else{
+                        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
+                                    alpha, alpha - 1, captures_only, temp_board, evaler, next_hash,
+                                    depth_abs + 1, search_type, i);
+                    }
+                    // if the first child is better than the alpha then search it again with a full window
+                    if (temp_board->eval > alpha && temp_board->eval < beta && i != 0){
+                        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
+                                    alpha, beta, captures_only, temp_board, evaler, next_hash,
+                                    depth_abs + 1, search_type, i);
+                    }
+                }
+                else {
+                    if (i == 0){
+                        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
+                                                alpha, beta, captures_only, temp_board, evaler, next_hash,
+                                                depth_abs + 1, search_type, i);
+                    }
+                    else{
+                        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
+                                    beta + 1, beta, captures_only, temp_board, evaler, next_hash,
+                                    depth_abs + 1, search_type, i);
+                    }
+                    // if the first child is better than the alpha then search it again with a full window
+                    if (temp_board->eval < beta && temp_board->eval > alpha && i != 0){
+                        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
+                                    alpha, beta, captures_only, temp_board, evaler, next_hash,
+                                    depth_abs + 1, search_type, i);
+                    }
+                }
+            }
+
+            // if the entry is not a PV-node then search with a full window
+            else {
+                temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
+                                                alpha, beta, captures_only, temp_board, evaler, next_hash,
+                                                depth_abs + 1, search_type, i);
+            } 
+        }
+        // if node type is unknown search with a full window
+        else{
+            temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
+                                alpha, beta, captures_only, temp_board, evaler, next_hash,
+                                depth_abs + 1, search_type, i);
+        }
+
+        ///////////////////////////
 
         // if the eval is infinity the search is trying to end so return
         if (temp_board->eval == INFINITY){
@@ -921,7 +988,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
                 alpha = max_eval;
             }
             // prune if a cut off occurs
-            if (alpha >= beta){
+            if (alpha > beta){
                 best_moves->prunned_loc = i + 1;
                 update_killer_table(evaler->killer_table, depth_abs, temp_board->move_start, temp_board->move_end);
                 break;
@@ -939,7 +1006,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
                 beta = min_eval;
             }
             // prune if a cut off occurs
-            if (alpha >= beta){
+            if (alpha > beta){
                 best_moves->prunned_loc = i + 1;
                 update_killer_table(evaler->killer_table, depth_abs, temp_board->move_start, temp_board->move_end);
                 break;
@@ -1014,7 +1081,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
         // update the evalers search depth
         evaler->search_depth = i;
-        evaler->max_depth = i + 15;
+        evaler->max_depth = max(i * 3 - 10, 10);
 
         eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0,
                              best_moves, evaler, hash, 0, SEARCH_TYPE_NORMAL, 0);
@@ -1059,8 +1126,6 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
         avg_depth = evaler->avg_depth;
         nodes = evaler->nodes;
-        evaler->avg_depth = 0;
-        evaler->nodes = 0;
     }
     // clear the output from the progress indicator (there has to be a better way to do this right?)
     printf("\r                                                           \r");

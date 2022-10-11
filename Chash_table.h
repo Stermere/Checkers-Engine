@@ -7,6 +7,7 @@
 #define PV_NODE 1
 #define FAIL_HIGH 2
 #define FAIL_LOW 3
+#define HORIZON_NODE 4
 #define NULL_MOVE 4
 #define NO_MOVE 0 // no move was found
 
