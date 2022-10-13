@@ -732,8 +732,6 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     float max_eval = -INFINITY;
     unsigned long long int next_hash;
     struct board_data* temp_board;
-    evaler->nodes++;
-    evaler->avg_depth += depth_abs;
 
     if (depth_abs > evaler->extended_depth && depth > 0){
         evaler->extended_depth = depth_abs;
@@ -790,6 +788,10 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 
     // get the moves for this board and player combo or use the moves generated from the last depth search
     if (best_moves->num_moves == -1 || captures_only){
+        // update evaler stats
+        evaler->nodes++;
+        evaler->avg_depth += depth_abs;
+
         int moves[96];
         num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, offsets, captures_only);
         // put all the moves into the best moves struct and fill this layer of the tree to the extent that we can
@@ -913,7 +915,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
                     }
                     else{
                         temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
-                                    alpha, alpha + 0.1, captures_only, temp_board, evaler, next_hash,
+                                    alpha, alpha - 0.1, captures_only, temp_board, evaler, next_hash,
                                     depth_abs + 1, search_type, i);
                     }
                     // if the first child is better than the alpha then search it again with a full window
@@ -931,7 +933,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
                     }
                     else{
                         temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
-                                    beta - 0.1, beta, captures_only, temp_board, evaler, next_hash,
+                                    beta + 0.1, beta, captures_only, temp_board, evaler, next_hash,
                                     depth_abs + 1, search_type, i);
                     }
                     // if the first child is better than the alpha then search it again with a full window
@@ -1065,8 +1067,6 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     double cpu_time_used;
     int depth;
     int extended_depth;
-    long long int nodes = 0;
-    long long int avg_depth = 0;
     int terminate = 0;
     start = clock();
     evaler->start_time = start;
@@ -1122,8 +1122,6 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
             best_moves_clone->eval = best_moves->eval;
             best_moves_clone->player = best_moves->player;
         }
-        avg_depth = evaler->avg_depth;
-        nodes = evaler->nodes;
     }
     // clear the output from the progress indicator (there has to be a better way to do this right?)
     printf("\r                                                           \r");
@@ -1132,11 +1130,12 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     printf("Search Results:\n");
     SetConsoleTextAttribute(hStdOut, FOREGROUND_GREEN);
     printf("Hashes stored: %lld\n", evaler->hash_table->num_entries);
-    printf("Nodes: %lld\n", nodes);
+    printf("Nodes: %lld\n", evaler->nodes);
     printf("Time: %fs\n", cpu_time_used);
     SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
     printf("Depth: %d\n", evaler->extended_depth);
-    printf("Avg depth: %lld\n", avg_depth / nodes);
+    printf("Avg depth: %lld\n", evaler->avg_depth / evaler->nodes);
+
     printf("Eval: %f\n\n", best_moves_clone->eval);
     // set the text color to white
     SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);

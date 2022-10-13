@@ -45,10 +45,11 @@ struct board_evaler* board_evaler_constructor(int search_depth, double time_limi
     evaler->piece_pos_map_p2 = compute_piece_pos_p2();
     evaler->king_pos_map = compute_king_pos();
     evaler->nodes = 0ll;
+    evaler->avg_depth = 0ll;
     // load the neural network
-    evaler->NN_evaler = load_network_from_file("neural_net/neural_net");
+    //evaler->NN_evaler = load_network_from_file("neural_net/neural_net");
     // prepare a table of size 8,388,608 
-    long long int hash_table_size = 1 << 23;
+    long long int hash_table_size = 1 << 24;
     evaler->hash_table = init_hash_table(hash_table_size);
     evaler->killer_table = init_killer_table(search_depth);
     evaler->start_time = start_time;
