@@ -914,7 +914,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
                     }
                     else{
                         temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
-                                    alpha, alpha - 0.1, captures_only, temp_board, evaler, next_hash,
+                                    alpha, alpha + 0.1, captures_only, temp_board, evaler, next_hash,
                                     depth_abs + 1, search_type, i);
                     }
                     // if the first child is better than the alpha then search it again with a full window
@@ -932,7 +932,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
                     }
                     else{
                         temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
-                                    beta + 0.1, beta, captures_only, temp_board, evaler, next_hash,
+                                    beta - 0.1, beta, captures_only, temp_board, evaler, next_hash,
                                     depth_abs + 1, search_type, i);
                     }
                     // if the first child is better than the alpha then search it again with a full window
@@ -1076,7 +1076,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
         // update the evalers search depth
         evaler->search_depth = i;
-        evaler->max_depth = min(max(i * 3 - 10, 10), search_depth);
+        evaler->max_depth = min(max(i * 2, 10), search_depth);
         evaler->alpha = -INFINITY;
         evaler->beta = INFINITY;
 
