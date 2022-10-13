@@ -1077,7 +1077,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
         // update the evalers search depth
         evaler->search_depth = i;
-        evaler->max_depth = max(i * 3 - 10, 10);
+        evaler->max_depth = min(max(i * 3 - 10, 10), search_depth);
         evaler->alpha = -INFINITY;
         evaler->beta = INFINITY;
 
@@ -1138,7 +1138,6 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     printf("Depth: %d\n", evaler->extended_depth);
     printf("Avg depth: %lld\n", avg_depth / nodes);
     printf("Eval: %f\n\n", best_moves_clone->eval);
-
     // set the text color to white
     SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
 
