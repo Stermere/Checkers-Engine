@@ -8,6 +8,7 @@
 #define FAIL_HIGH 2
 #define FAIL_LOW 3
 #define HORIZON_NODE 4
+#define UNKNOWN_NODE 5
 #define NULL_MOVE 4
 #define NO_MOVE 0 // no move was found
 
@@ -32,7 +33,6 @@ struct hash_table_entry {
     // moves are stored in a format of: top byte is the start square, bottom byte is the end square
     short best_move;
     short refutation_move;
-    // 1 is a pv-node, 2 is a fail high node, 3 is a fail low node 
     char node_type;
 };
 
@@ -139,7 +139,7 @@ int compare_hash_entries(struct hash_table_entry *entry1, int depth, int age){
     if(entry1->age == age){
         // less deep entrys store more work but are also less likly to be found again so
         // decide which one to keep is not trivial, for now we will keep the one with the lower depth
-        if (entry1->depth <= depth){
+        if (entry1->depth <= depth || entry1->node_type == PV_NODE){
             return 1;
         }
         else{

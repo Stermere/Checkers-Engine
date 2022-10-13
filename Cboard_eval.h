@@ -24,6 +24,8 @@ struct board_evaler{
     float *king_pos_map;
     int search_depth;
     int max_depth;
+    float alpha;
+    float beta;
     struct neural_net *NN_evaler;
     struct hash_table* hash_table;
     struct killer_table* killer_table;
@@ -104,7 +106,7 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
         if (p2num < 3)
             eval += 20.0f;
         if (p2num < 2)
-            eval -= 40.0f;
+            eval += 40.0f;
     }
     else if (p2num > p1num){
         eval -= (20.0f * (p2num - p1num)) / (p1num + p2num);
@@ -146,13 +148,13 @@ float* compute_piece_pos_p1(){
     float *eval_table = (float*)malloc(sizeof(float) * 64);
     float table[8][8] = { 
         {0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
-        {0, 0, 2, 1, 1, 1, 0, 0},
-        {0, 0, 1, 1, 1, 1, 0, 0},
-        {0, 0, 1, 1, 1, 1, 0, 0},
-        {0, 0, 0, 0, 0, 4, 0, 4},
-        {0, 0, 4, 0, 2, 0, 4, 0}
+        {0, 1, 1, 1, 1, 1, 0, 0},
+        {0, 0, 0, 0, 0, 2, 0, 1},
+        {0, 0, 4, 0, 1, 0, 4, 0}
     };
     for (int i = 0; i < 64; i++){
         eval_table[i] = table[i / 8][i % 8]/ 10.0;
@@ -165,13 +167,13 @@ float* compute_piece_pos_p2(){
     float *eval_table = (float*)malloc(sizeof(float) * 64);
     // mirror the table
     float table[8][8] = { 
-        {0, 4, 0, 2, 0, 4, 0, 0},
-        {4, 0, 4, 0, 0, 0, 0, 0},
+        {0, 4, 0, 1, 0, 4, 0, 0},
+        {1, 0, 2, 0, 0, 0, 0, 0},
+        {0, 0, 1, 1, 1, 1, 1, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
-        {0, 0, 1, 1, 1, 2, 0, 0},
-        {0, 0, 1, 1, 1, 1, 0, 0},
-        {0, 0, 1, 1, 1, 1, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0}
     };
     for (int i = 0; i < 64; i++){

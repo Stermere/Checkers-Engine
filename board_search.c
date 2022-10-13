@@ -695,7 +695,7 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int num_move
     }
 
     // if the node is a horizon node, leave it alone
-    if (depth <= 3) {
+    if (depth <= 2) {
         return depth;
     }
 
@@ -705,23 +705,12 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int num_move
         node_type = table_entry->node_type;
     }
 
-    // if the move is forcing extend it 
-    if (num_moves == 1){
-        return depth + 1;
-    }
-
     // PV line extension
-    if (evaler->hash_table->pv_retrival_count % 4 == 2 && depth_abs > 3 && node_num == 0){
+    if (evaler->hash_table->pv_retrival_count % 4 == 2 && node_num == 0){
         return depth + 1;
     }
-
-    // if the node is a PV node extend the first move and reduce the rest
-    if (node_type == PV_NODE && node_num >= 1 && depth_abs > 3){
-        depth -= 1;
-    }
-
     // late move reduction
-    if (depth_abs > 5 && node_num > 2){
+    if (depth_abs > 5 && node_num > 3 && node_type != PV_NODE){
         // if the node number is greater than 2 and  return -1
         depth -= 1;
     }
@@ -878,6 +867,10 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         }
     }
 
+    // save initial alpha and beta values
+    float alpha_orig = alpha;
+    float beta_orig = beta;
+
     // the childer nodes are now ready to be searched so begin the search
     short best_move = NO_MOVE;
     short refutation_move = NO_MOVE;
@@ -920,7 +913,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
                     }
                     else{
                         temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
-                                    alpha, alpha - 1, captures_only, temp_board, evaler, next_hash,
+                                    alpha, alpha + 0.1, captures_only, temp_board, evaler, next_hash,
                                     depth_abs + 1, search_type, i);
                     }
                     // if the first child is better than the alpha then search it again with a full window
@@ -938,7 +931,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
                     }
                     else{
                         temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
-                                    beta + 1, beta, captures_only, temp_board, evaler, next_hash,
+                                    beta - 0.1, beta, captures_only, temp_board, evaler, next_hash,
                                     depth_abs + 1, search_type, i);
                     }
                     // if the first child is better than the alpha then search it again with a full window
@@ -986,6 +979,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             if (max_eval > alpha){
                 refutation_move = (temp_board->move_start << 8) | temp_board->move_end;
                 alpha = max_eval;
+                evaler->alpha = alpha;
             }
             // prune if a cut off occurs
             if (alpha > beta){
@@ -1004,6 +998,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             if (min_eval < beta){
                 refutation_move = (temp_board->move_start << 8) | temp_board->move_end;
                 beta = min_eval;
+                evaler->beta = beta;
             }
             // prune if a cut off occurs
             if (alpha > beta){
@@ -1023,16 +1018,17 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 
     // store the eval in the hash table (must find the type of node first before storing it)
     // find node type by seeing if this node caused a alpha/beta cutoff
-    char node_type = PV_NODE;
-    
-    if (board_eval <= alpha){
+    char node_type = UNKNOWN_NODE;
+
+    // if alpha and beta have improved then this is a PV node
+    if (alpha_orig > evaler->alpha && beta_orig < evaler->beta){
+        node_type = PV_NODE;
+    }
+    else if (board_eval <= alpha){
         node_type = FAIL_LOW;
     }
     else if (board_eval >= beta){
         node_type = FAIL_HIGH;
-    }
-    else{
-        node_type = PV_NODE;
     }
     
 
@@ -1082,6 +1078,8 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         // update the evalers search depth
         evaler->search_depth = i;
         evaler->max_depth = max(i * 3 - 10, 10);
+        evaler->alpha = -INFINITY;
+        evaler->beta = INFINITY;
 
         eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0,
                              best_moves, evaler, hash, 0, SEARCH_TYPE_NORMAL, 0);
@@ -1129,9 +1127,6 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     }
     // clear the output from the progress indicator (there has to be a better way to do this right?)
     printf("\r                                                           \r");
-
-    // print the line of best moves to the terminal (deguggigng)
-    //print_line(p1, p2, p1k, p2k, best_moves, depth);
 
     SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_INTENSITY);
     printf("Search Results:\n");
