@@ -695,12 +695,12 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int num_move
     }
 
     // if the node is a horizon node, leave it alone
-    if (depth <= 2) {
+    if (depth <= 3) {
         return depth;
     }
 
     // extract the node type from the table entry
-    int node_type = HORIZON_NODE;
+    int node_type = UNKNOWN_NODE;
     if (table_entry != NULL){
         node_type = table_entry->node_type;
     }
@@ -710,8 +710,7 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int num_move
         return depth + 1;
     }
     // late move reduction
-    if (depth_abs > 5 && node_num > 3 && node_type != PV_NODE){
-        // if the node number is greater than 2 and  return -1
+    if (depth_abs > 3 && node_num > 3){
         depth -= 1;
     }
 
