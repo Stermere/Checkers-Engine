@@ -706,7 +706,7 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int num_move
     }
 
     // PV line extension
-    if (evaler->hash_table->pv_retrival_count % 4 == 2 && node_num == 0){
+    if (evaler->hash_table->pv_retrival_count % 4 == 2 && node_num == 0 && node_type != PV_NODE){
         return depth + 1;
     }
     // late move reduction
