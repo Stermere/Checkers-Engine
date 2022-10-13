@@ -1,3 +1,10 @@
 # Checkers-Engine
-This engine uses the minimax algorithm with alpha-beta pruning and a slew of other optimizations to compute the best move for a position. In its current state, it is a strong player looking ahead 19-23 moves in the beginning to mid-game with 23-30 in the endgame.  
-	One important note for any serious checkers players out there reading this, if you want a program to seriously improve your skills, this is likely not the one. This program does play at a pro-level, but there is a parity from the rules where kings can jump on the same turn they reach the back rank, and jumps are allowed by any piece that can jump if a double jump is possible. I like to think of this as a spin on the game! When playing other high-level engines these jumps never get used indicating that they are easily refuted but still worth mentioning.
+This engine uses the minimax algorithm with alpha-beta pruning and a slew of other optimizations to compute the best move for a position. In its current state, it is a
+strong player looking ahead quite far with the extended search reaching 30 moves deep. In fact, it is able to tie cake sometimes (cake is a very strong engine for
+reference) when it is given time odds of 2:1
+and cake is not allowed an end-game table (so only when cake is crippled but hey I'm still happy about this). 
+
+In its current state, the program needs some love, and many mistakes that I made as I started this project still lurk in the depths of the code. There is one
+inconsistency with the rules of checkers that should be noted, kings can jump immediately after getting to the last rank this is quite a rare
+occurrence though at high-level engine play and seems to happen more and more the worse the opponent! I challenge anyone to beat it and if you do I would love to hear
+your opinions on its play.
