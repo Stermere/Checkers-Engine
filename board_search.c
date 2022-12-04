@@ -20,6 +20,7 @@
 #define max(a,b) (((a)>(b))?(a):(b))
 #define SEARCH_TYPE_NULL 1
 #define SEARCH_TYPE_NORMAL 0
+#define PRINT_OUTPUT 0
 
 
 #define PY_SSIZE_T_CLEAN
@@ -1095,8 +1096,11 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         if (depth > extended_depth){
             extended_depth = depth;
         }
-        
-        printf("\rPLY: %d\t PLYEX: %d\t Eval: %f", depth, evaler->extended_depth, eval_);
+
+        if (PRINT_OUTPUT){
+            printf("\rPLY: %d\t PLYEX: %d\t Eval: %f", depth, evaler->extended_depth, eval_);
+        }
+
         // get the end time
         end = clock();
         cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -1122,23 +1126,23 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
             best_moves_clone->player = best_moves->player;
         }
     }
-    // clear the output from the progress indicator (there has to be a better way to do this right?)
-    printf("\r                                                           \r");
+    // print the output of the engine
+    if (PRINT_OUTPUT) {
+        printf("\r                                                                                       \r");
+        SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_INTENSITY);
+        printf("Search Results:\n");
+        SetConsoleTextAttribute(hStdOut, FOREGROUND_GREEN);
+        printf("Hashes stored: %lld\n", evaler->hash_table->num_entries);
+        printf("Nodes: %lld\n", evaler->nodes);
+        printf("Time: %fs\n", cpu_time_used);
+        SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
+        printf("Depth: %d\n", evaler->extended_depth);
+        printf("Avg depth: %lld\n", evaler->avg_depth / evaler->nodes);
 
-    SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_INTENSITY);
-    printf("Search Results:\n");
-    SetConsoleTextAttribute(hStdOut, FOREGROUND_GREEN);
-    printf("Hashes stored: %lld\n", evaler->hash_table->num_entries);
-    printf("Nodes: %lld\n", evaler->nodes);
-    printf("Time: %fs\n", cpu_time_used);
-    SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
-    printf("Depth: %d\n", evaler->extended_depth);
-    printf("Avg depth: %lld\n", evaler->avg_depth / evaler->nodes);
-
-    printf("Eval: %f\n\n", best_moves_clone->eval);
-    // set the text color to white
-    SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
-
+        printf("Eval: %f\n\n", best_moves_clone->eval);
+        // set the text color to white
+        SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+    }
     // print the line of best moves to the terminal (deguggigng)
     //print_line(p1, p2, p1k, p2k, best_moves);
 
