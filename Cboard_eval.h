@@ -155,7 +155,7 @@ float* compute_piece_pos_p1(){
         {0, 0, 1, 1, 1, 1, 0, 0},
         {0, 1, 1, 1, 1, 1, 0, 0},
         {0, 0, 0, 0, 0, 2, 0, 1},
-        {0, 0, 4, 0, 1, 0, 4, 0}
+        {0, 0, 8, 0, 1, 0, 8, 0}
     };
     for (int i = 0; i < 64; i++){
         eval_table[i] = table[i / 8][i % 8]/ 10.0;
@@ -168,7 +168,7 @@ float* compute_piece_pos_p2(){
     float *eval_table = (float*)malloc(sizeof(float) * 64);
     // mirror the table
     float table[8][8] = { 
-        {0, 4, 0, 1, 0, 4, 0, 0},
+        {0, 8, 0, 1, 0, 8, 0, 0},
         {1, 0, 2, 0, 0, 0, 0, 0},
         {0, 0, 1, 1, 1, 1, 1, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
