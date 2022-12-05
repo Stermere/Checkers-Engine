@@ -1127,6 +1127,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
     }
     // print the output of the engine
+    SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
     if (PRINT_OUTPUT) {
         printf("\r                                                                                       \r");
         SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_INTENSITY);
