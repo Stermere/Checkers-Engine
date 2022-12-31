@@ -922,10 +922,10 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 
         // define the next search type
         int next_search_type = search_type;
-        if (i <= 1 && (search_type == SEARCH_TYPE_PV)) {
+        if (i <= 2 && (search_type == SEARCH_TYPE_PV)) {
             next_search_type = SEARCH_TYPE_EXACT;
         }
-        else if (i <= 1 && search_type == SEARCH_TYPE_EXACT) {
+        else if (i <= 2 && search_type == SEARCH_TYPE_EXACT) {
             next_search_type = SEARCH_TYPE_PV;
         }
         else {
