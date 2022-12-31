@@ -26,21 +26,21 @@ import checkers_NN
 # output: file type
 def game_to_file(game, file_name = "game_data.ds"):
     # create a file
-    file = open(file_name, "w")
+    file_ds = open(file_name, "w")
     # write the game data to the file
-    file.write(f"{game[-1]} {game[-2]}\n")
+    file_ds.write(f"{game[-1]} {game[-2]}\n")
     game = deepcopy(game[:-2])
     
     # write the game data to the file
     for i in range(len(game)):
-        file.write(f"{game[i][0]} {game[i][1]} {game[i][2]} {game[i][3]} {game[i][4]}\n")
+        file_ds.write(f"{game[i][0]} {game[i][1]} {game[i][2]} {game[i][3]} {game[i][4]}\n")
     # close the file
-    file.close()
+    file_ds.close()
 
 
 # function to train the neural network
-def train_neural_net(neural_net_file, data_set_file, epochs, learning_rate):
-    error = checkers_NN.train_net(neural_net_file, data_set_file, epochs, learning_rate)
+def train_neural_net(neural_net_file, data_set_file, epochs, batch_size, learning_rate):
+    error = checkers_NN.train_net(neural_net_file, data_set_file, epochs, batch_size, learning_rate)
 
     # print the error
     #print("error: " + str(error))
@@ -55,7 +55,7 @@ def test_neural_net(neural_net_file, data_set_file):
 def play_game(save_list):
     # create a board
     board = Board()
-    search_time = 10
+    search_time = 0.2
     # create a list to store the game data
     game = []
     num_moves = 0
@@ -84,7 +84,7 @@ def play_game(save_list):
         # if the game is more than 4 moves we use the search engine to find the best move
         else:
             # get the best move
-            best_move = search_engine.search_position(p1, p2, p1k, p2k, player, search_time, 20)
+            best_move = search_engine.search_position(p1, p2, p1k, p2k, player, search_time, 50)
             eval_ = best_move[-1][-1]
             depth = best_move[-1][1]
 
@@ -205,7 +205,7 @@ def play_n_games(n):
     manager = mp.Manager()
     
     # variable to store the index of the file being written to
-    file_index = 0
+    file_index = 2370
 
     for i in range(n // 10):
         # create a list to store the game data
@@ -311,7 +311,7 @@ def main():
     #print("Data generated! exiting...")
 
     # write the games to a training and testing file
-    #conv_gamefiles_to_ds("data_set/old_eval/training_data", "data_set/data_set", 600, True)
+    #conv_gamefiles_to_ds("data_set/old_eval/training_data", "data_set/data_set", 2080, True)
     #exit(0)
 
     # train the neural network on itself
@@ -320,8 +320,8 @@ def main():
     #exit(1)
 
     # play a number of games and save the game data to a file (for bulk data creation)
-    play_n_games(10000)
-    exit(0)
+    #play_n_games(10000)
+    #exit(0)
 
     # test the neural network 
     print("testing neural network...")
@@ -329,9 +329,12 @@ def main():
 
     # train the neural network using the data set
     print("training neural network...")
-    epochs = 64
-    for i in range(epochs):
-        train_neural_net("neural_net/neural_net", "data_set/data_set_train", 1, 0.001)
+    epochs_out = 32
+    epochs = 32
+    batch_size = 32
+    learning_rate = 0.01
+    for i in range(epochs_out):
+        train_neural_net("neural_net/neural_net", "data_set/data_set_train", epochs, batch_size, learning_rate)
         print(abs(test_neural_net("neural_net/neural_net", "data_set/data_set_test")))
 
     # test the neural network on the test data set
