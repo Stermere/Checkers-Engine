@@ -688,6 +688,24 @@ int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, in
     return num_moves;
 }
 
+// a function to get the search type of the next node
+int get_node_type(int search_type, int node_num) {
+    int next_search_type = search_type;
+    if (node_num <= 0 && (search_type == SEARCH_TYPE_PV)) {
+        next_search_type = SEARCH_TYPE_EXACT;
+    } 
+
+    else if (node_num <= 0 && search_type == SEARCH_TYPE_EXACT) {
+        next_search_type = SEARCH_TYPE_PV;
+    }
+
+    else {
+        next_search_type = SEARCH_TYPE_NORMAL;
+    }
+
+    return next_search_type;
+}
+
 // a function that decides if a search should be extended or reduced at a certain node
 int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_type,
                             int player, int alpha, int beta, struct hash_table_entry* table_entry,
@@ -702,7 +720,6 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
         return depth;
     }
 
-
     // extract the node type from the table entry
     int node_type = UNKNOWN_NODE;
     if (table_entry != NULL){
@@ -710,12 +727,8 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
     }
 
     // PV line extension
-    if (search_type == SEARCH_TYPE_PV && node_num == 1) {
+    if (search_type == SEARCH_TYPE_PV && node_num <= 0) {
         return depth + 2;
-    }
-
-    if (node_type == PV_NODE){
-        return depth + 1;
     }
 
     // if the node is a fail high node, reduce the depth
@@ -919,18 +932,8 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions
         int depth_next = should_extend_or_reduce(depth, depth_abs, i, search_type, player, alpha, beta, table_entry, evaler) - 1;
 
-
         // define the next search type
-        int next_search_type = search_type;
-        if (i <= 2 && (search_type == SEARCH_TYPE_PV)) {
-            next_search_type = SEARCH_TYPE_EXACT;
-        }
-        else if (i <= 2 && search_type == SEARCH_TYPE_EXACT) {
-            next_search_type = SEARCH_TYPE_PV;
-        }
-        else {
-            next_search_type = SEARCH_TYPE_NORMAL;
-        }
+        int next_search_type = get_node_type(search_type, i);
 
         temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
                             alpha, beta, captures_only, temp_board, evaler, next_hash,
@@ -1007,8 +1010,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     else if (board_eval >= beta){
         node_type = FAIL_HIGH;
     }
-    
-
+    // store the eval in the hash table
     add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, best_move, refutation_move, node_type);
     return board_eval;
 }
