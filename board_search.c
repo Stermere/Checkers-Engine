@@ -809,6 +809,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 
     // check if the moves are being repeated in this line of moves and if so evaluate this as a draw and return
     if (best_moves->parent->parent->parent->parent->hash == hash)
+    
         return 0.0;
 
     // if the depth is 0 then we are at the end of the standard search so begin the captures search
@@ -885,7 +886,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             best_moves->eval = board_eval;
 
             // store the board in the hash map
-            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, NO_MOVE, NO_MOVE, PV_NODE);
+            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, NO_MOVE, NO_MOVE, UNKNOWN_NODE);
             return board_eval;
         }
         // if there are no moves and captures only is true then we found the end of a catures only search evaluate the position and return
@@ -894,7 +895,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             best_moves->eval = board_eval;
 
             // store the board in the hash map
-            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, NO_MOVE, NO_MOVE, PV_NODE);
+            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, NO_MOVE, NO_MOVE, UNKNOWN_NODE);
             return board_eval;
         }
     }
