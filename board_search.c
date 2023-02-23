@@ -23,6 +23,9 @@
 #define SEARCH_TYPE_PV 2
 #define SEARCH_TYPE_EXACT 3
 #define PRINT_OUTPUT 1
+#define SEARCH_TYPE_PV 2
+#define SEARCH_TYPE_EXACT 3
+#define PRINT_OUTPUT 1
 
 
 #define PY_SSIZE_T_CLEAN

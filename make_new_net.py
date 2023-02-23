@@ -6,10 +6,10 @@ import checkers_NN
 
 def main():
     # create a new neural network
-    num_inputs = 32
+    num_inputs = 128
     num_outputs = 1
-    num_layers = 6
-    hidden_size = 16
+    num_layers = 3
+    hidden_size = 64
     file_name = 'neural_net/neural_net'
 
     checkers_NN.init_net(num_inputs, num_layers, num_outputs, hidden_size, file_name)
