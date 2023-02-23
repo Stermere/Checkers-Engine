@@ -107,14 +107,7 @@ struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long 
     if (entry_index->hash == hash && entry_index->player == player){
         // check if the entry is a mate score if so convert it
         float eval = entry_index->eval;
-        if (eval < -899.0 || eval > 899.0){
-            if (eval < -899.0){
-                entry_index->eval += depth;
-            }
-            else{
-                entry_index->eval -= depth;
-            }
-        }
+
         // incriment the pv retrival count if relevent
         if (entry_index->node_type == PV_NODE){
             table->pv_retrival_count++;
