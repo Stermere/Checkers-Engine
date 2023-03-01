@@ -129,7 +129,7 @@ struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long 
 // note: youger ages are actually larger numbers since age == search_depth the node was added to the table at
 int compare_hash_entries(struct hash_table_entry *entry1, int depth, int age){
     // we always want to keep entrys that are younger as they are more relevant
-    if(entry1->age == age){
+    if(entry1->age == age && !abs(entry1->eval) > 500.0f){
         // less deep entrys store more work but are also less likly to be found again so
         // decide which one to keep is not trivial, for now we will keep the one with the lower depth
         if (entry1->depth <= depth || entry1->node_type == PV_NODE){

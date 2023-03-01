@@ -78,25 +78,25 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
     int p2num = 0;
     for (int i = 0; i < num_pieces; i++){
         if (p1 >> piece_loc_array[i] & 1){
-            eval += 3.0;
+            eval += 3.0f;
             eval += evaluate_pos(1, piece_loc_array[i], evaler);
             p1num++;
 
         }
         else if (p2 >> piece_loc_array[i] & 1){
-            eval -= 3.0;
+            eval -= 3.0f;
             eval -= evaluate_pos(2, piece_loc_array[i], evaler);
             p2num++;
             
         }
         else if (p1k >> piece_loc_array[i] & 1){
-            eval += 5.0;
+            eval += 5.0f;
             eval += evaluate_pos(3, piece_loc_array[i], evaler);
             p1num++;
 
         }
         else if (p2k >> piece_loc_array[i] & 1){
-            eval -= 5.0;
+            eval -= 5.0f;
             eval -= evaluate_pos(4, piece_loc_array[i], evaler);
             p2num++;
         }

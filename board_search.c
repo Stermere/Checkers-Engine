@@ -727,12 +727,12 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
     }
 
     // PV line extension
-    if (search_type == SEARCH_TYPE_PV && node_num <= 0) {
+    if (search_type == SEARCH_TYPE_PV && node_num <= 1) {
         return depth + 2;
     }
 
     // if the node is a fail high node, reduce the depth
-    if ((node_type == FAIL_HIGH || node_type == FAIL_LOW) && depth_abs > 5){
+    if ((node_type == FAIL_HIGH || node_type == FAIL_LOW)){
         depth--;
     }
 
@@ -806,8 +806,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 
     // check if the moves are being repeated in this line of moves and if so evaluate this as a draw and return
     if (best_moves->parent->parent->parent->parent->hash == hash)
-    
-        return 0.0;
+        return 0.0f;
 
     // if the depth is 0 then we are at the end of the standard search so begin the captures search
     if (depth <= 0){
@@ -995,7 +994,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     char node_type = UNKNOWN_NODE;
 
     // if alpha and beta have improved then this is a PV node
-    if (alpha_orig > evaler->alpha && beta_orig < evaler->beta){
+    if (alpha_orig >= evaler->alpha && beta_orig <= evaler->beta){
         node_type = PV_NODE;
     }
     else if (board_eval <= alpha){
