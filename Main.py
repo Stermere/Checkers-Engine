@@ -73,7 +73,7 @@ def start_processing(board : list, state : int, p_time, gui: object, ply : int):
 def parse_args(args):
     time = 1
     bot = False
-    ply = 52
+    ply = 50
     if len(args) == 1:
         return bot, time, ply
     search_time = args[2]
