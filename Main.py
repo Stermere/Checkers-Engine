@@ -1,5 +1,5 @@
 # The driver program that interacts with the board search algorithms and GUI 
-# uses minimax and monty carlo tree searches to find a optimial move
+# uses minimax search with alpha beta pruning to find the best move for the current player
 # developed by Collin Kees
 
 
@@ -20,7 +20,7 @@ def start_search(board : list, player : int, p_time : int, ply : int, return_dic
     p1, p2, p1k, p2k = convert_to_bitboard(board)
     results = search_engine.search_position(p1, p2, p1k, p2k, player, p_time, ply)
 
-    # update the return dict (stops montycarlo if a search is terminated before the time constraint)
+    # update the return dict
     return_dict["depth"] = results[-1][0]
     return_dict["leafs"] = results[-1][1]
     return_dict["eval"] = results[-1][3]
