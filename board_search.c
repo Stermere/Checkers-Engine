@@ -49,8 +49,8 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth);
 void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k);
 long long n_ply_search(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player, struct set* piece_loc, int* offsets, int depth);
-void merge(struct board_data* ptr, int half, int num_elements);
-void merge_sort(struct board_data* ptr, int num_elements);
+void quick_sort(struct board_data* ptr, int low, int high);
+int partition(struct board_data ptr, int low, int high);
 unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, unsigned long long int hash, struct board_evaler* evaler);
 struct board_data* get_best_move(struct board_data *head, int player);
 void end_board_search(struct board_data* best_moves, struct board_evaler* evaler);
@@ -356,8 +356,9 @@ void sort_moves(struct board_data* ptr, int player){
             board_data_list[i].eval = board_data_list[i].eval * -1;
         }
     }
-    // use the merge-sort algorithm to sort the moves
-    merge_sort(board_data_list, ptr->num_moves);
+
+    // sort moves
+    quick_sort(board_data_list, 0, ptr->num_moves - 1);
 
     // undo the multiplication by the player variable
     if (player == 2){
@@ -367,67 +368,37 @@ void sort_moves(struct board_data* ptr, int player){
     }
 }
 
-// the mergesort recursive funtion
-// takes the pointer to the board_data array and the number of elements in the array
-void merge_sort(struct board_data* ptr, int num_elements){
-    // base case
-    if (num_elements <= 1){
-        return;
-    }
-    // recursive case
-    // split the array into two halves
-    int half = num_elements / 2;
-    // sort the two halves
-    merge_sort(ptr, half);
-    merge_sort(ptr + half, num_elements - half);
-    // merge the two sorted halves
-    merge(ptr, half, num_elements - half);
+int partition(struct board_data* ptr, int low, int high) {
+    // get the pivot
+    float pivot = ptr[high].eval;
+    struct board_data temp;
 
+    // indicates the right position of the pivot
+    int i = low - 1;
+
+    for (int j = low; j <= high - 1; j++) {
+        if (ptr[j].eval < pivot) {
+            i++;
+            temp = ptr[j];
+            ptr[j] = ptr[i];
+            ptr[i] = temp;
+        }
+    }
+    temp = ptr[i + 1];
+    ptr[i + 1] = ptr[high];
+    ptr[high] = temp;
+
+    return i + 1;
 }
 
-// the merge part of the merge sort algorithm
-void merge(struct board_data* ptr, int half, int num_elements){
-    // create two arrays to hold the two halves of the array
-    struct board_data* left = malloc(sizeof(struct board_data) * half);
-    struct board_data* right = malloc(sizeof(struct board_data) * num_elements - half);
-    // copy the left half of the array into the left array
-    for (int i = 0; i < half; i++){
-        left[i] = ptr[i];
+// quick sort algorithm
+void quick_sort(struct board_data* ptr, int low, int high) {
+    // split the array in half
+    if (low < high) {
+        int par = partition(ptr, low, high);
+        quick_sort(ptr, low, par - 1);
+        quick_sort(ptr, par + 1, high);
     }
-    // copy the right half of the array into the right array
-    for (int i = 0; i < num_elements - half; i++){
-        right[i] = ptr[half + i];
-    }
-    // merge the two sorted halves
-    int left_index = 0;
-    int right_index = 0;
-    int index = 0;
-    while (left_index < half && right_index < num_elements - half){
-        if (left[left_index].eval > right[right_index].eval){
-            ptr[index] = left[left_index];
-            left_index++;
-        }
-        else{
-            ptr[index] = right[right_index];
-            right_index++;
-        }
-        index++;
-    }
-    // copy the rest of the left array into the array
-    while (left_index < half){
-        ptr[index] = left[left_index];
-        left_index++;
-        index++;
-    }
-    // copy the rest of the right array into the array
-    while (right_index < num_elements - half){
-        ptr[index] = right[right_index];
-        right_index++;
-        index++;
-    }
-    // free the two arrays
-    free(left);
-    free(right);
 }
 
 // find the state of the next board after a move
