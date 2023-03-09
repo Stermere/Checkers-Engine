@@ -72,7 +72,7 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, float
         table->num_entries--;
 
         // if the entry is populated and the value stored is deamed more relevant return
-        if (compare_hash_entries(entry_index, depth, age)){
+        if (compare_hash_entries(entry_index, depth, age) && entry_index->hash != hash){
             return;
             }
     }
