@@ -55,7 +55,7 @@ unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong 
 struct board_data* get_best_move(struct board_data *head, int player);
 void end_board_search(struct board_data* best_moves, struct board_evaler* evaler);
 int free_board_data(struct board_data* data);
-void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_data* head);
+void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_data* head, int player);
 
 // for some reason this has to be above the python stuff even if it is defined, otherwise it doesn't work
 
@@ -910,15 +910,16 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
                             alpha, beta, captures_only, temp_board, evaler, next_hash,
                             depth_abs + 1, next_search_type, i);
 
-        // if the eval is infinity the search is trying to end so return
-        if (temp_board->eval == INFINITY){
-            return INFINITY;
-        }
         
         // undo the update to the board and piece locations
         undo_piece_locations_update(temp_board->move_start, temp_board->move_end, piece_loc);
         undo_board_update(p1, p2, p1k, p2k, temp_board->move_start, temp_board->move_end, jumped_piece_type, initial_piece_type);
 
+        // if the eval is infinity the search is trying to end so return
+        if (temp_board->eval == INFINITY){
+            return INFINITY;
+        }
+        
         // alpha beta prunning
         if (player == 1){
             if (max_eval < temp_board->eval){
@@ -1116,7 +1117,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
     }
     // print the line of best moves to the terminal (deguggigng)
-    //print_line(p1, p2, p1k, p2k, move_tree);
+    print_line(p1, p2, p1k, p2k, move_tree, 2);
 
     // free the board_tree (since the one ply clone is sent back)
     free_board_data(move_tree);
@@ -1235,42 +1236,26 @@ void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k){
 }
 
 // print the expected line to standard out in a human readable format (for debugging)
-void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_data* head){
-    // print the line that the bot expects to happen
-    struct board_data *temp_board = head;
-    struct board_data *temp_temp_board;
-    float eval_temp = 0;
-    while (1){
-        update_board(&p1, &p2, &p1k, &p2k, temp_board->move_start, temp_board->move_end);
-        human_readble_board(p1, p2, p1k, p2k); // print the board
-        if (temp_board->player == 1){
-            if (temp_board->next_boards == NULL || temp_board->num_moves == 0){
-                return;
-            }
-            temp_temp_board = temp_board->next_boards;
-            eval_temp = temp_temp_board->eval; 
-            for (int i = 0 ; i < temp_board->num_moves; i++){
-                if (temp_board->next_boards[i].eval > eval_temp){
-                    temp_temp_board = temp_board->next_boards + i;
-                    eval_temp = temp_temp_board->eval;
-                }
-            }
-        }
-        else if (temp_board->player == 2){
-            if (temp_board->next_boards == NULL || temp_board->num_moves == 0){
-                return;
-            }
-            temp_temp_board = temp_board->next_boards;
-            eval_temp = temp_temp_board->eval; 
-            for (int i = 0 ; i < temp_board->num_moves; i++){
-                if (temp_board->next_boards[i].eval < eval_temp){
-                    temp_temp_board = temp_board->next_boards + i;
-                    eval_temp = temp_temp_board->eval;
-                }
-            }
-        }
-        temp_board = temp_temp_board;
+void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_data* head, int player){
+    struct board_data *current_board = head;
+    struct board_data *temp_board;
+
+    // while there is a next board search the boards by eval and pick the highest one
+    while (current_board->next_boards != NULL) {
+        sort_moves(current_board, player);
+
+        // make the move and print the board
+        update_board(&p1, &p2, &p1k, &p2k, current_board->move_start, current_board->move_end);
+
+        // print the board
+        human_readble_board(p1, p2, p1k, p2k);
+
+        // update the current board
+        current_board = &current_board->next_boards[0];
     }
+
+
+    
 }
 
 
