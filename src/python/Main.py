@@ -6,8 +6,8 @@
 import sys
 import os
 from time import process_time
-from src.python.bitboard_converter import convert_bit_move, convert_matrix_move, convert_to_bitboard, convert_to_matrix
-from src.python.Board_opperations import Board, check_jump_required, update_board, check_win, check_tie
+from bitboard_converter import convert_bit_move, convert_matrix_move, convert_to_bitboard, convert_to_matrix
+from Board_opperations import Board, check_jump_required, update_board, check_win, check_tie
 import multiprocessing as mp
 
 # import the search engine
@@ -230,6 +230,6 @@ def main(args) -> None:
 if __name__ == '__main__':
     # import modules needed for the main thread
     import pygame
-    from src.python.Gui import Gui
+    from Gui import Gui
 
     main(sys.argv)

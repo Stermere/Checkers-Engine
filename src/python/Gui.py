@@ -2,7 +2,7 @@
 
 import pygame
 import sys
-from src.python.Board_opperations import check_jump_required, generate_options, update_board
+from Board_opperations import check_jump_required, generate_options, update_board
 
 
 class Gui(): # class to deal with the visual elements for the human player
