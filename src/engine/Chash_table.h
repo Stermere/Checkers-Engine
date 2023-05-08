@@ -157,7 +157,7 @@ unsigned long long int get_hash(unsigned long long int p1, unsigned long long in
         else if (p1k & (1ll << i)){
             hash = hash ^ table->piece_hash_diff[i + 128];
         }
-        else if (p2k & (1l << i)){
+        else if (p2k & (1ll << i)){
             hash = hash ^ table->piece_hash_diff[i + 192];
         }
     }

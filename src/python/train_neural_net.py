@@ -332,7 +332,7 @@ def main():
     epochs_out = 32
     epochs = 32
     batch_size = 32
-    learning_rate = 0.01
+    learning_rate = 0.1
     for i in range(epochs_out):
         train_neural_net("neural_net/neural_net", "data_set/data_set_train", epochs, batch_size, learning_rate)
         print(abs(test_neural_net("neural_net/neural_net", "data_set/data_set_test")))

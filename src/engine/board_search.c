@@ -788,7 +788,8 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         captures_only = True;
     }
 
-    // TODO optimize this out
+    // TODO optimize this to not malloc memory for the tree and instead just traverse on the fly
+
     // get the moves for this board and player combo or use the moves generated from the last depth search
     if (best_moves->num_moves == -1 || captures_only){
         // update evaler stats
@@ -797,6 +798,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 
         int moves[96];
         num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, offsets, captures_only);
+
         // put all the moves into the best moves struct and fill this layer of the tree to the extent that we can
         if (!(captures_only && num_moves == 0)){
             best_moves->num_moves = num_moves;
@@ -844,7 +846,6 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         }
 
     }
-    // end TODO
 
     // if there are no move then a player must have won, or there are no captures so end this branch (only count as a win if captures_only is false)
     // this is not a perfect check but it should be good enough
@@ -855,7 +856,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             best_moves->eval = board_eval;
 
             // store the board in the hash map
-            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, NO_MOVE, NO_MOVE, UNKNOWN_NODE);
+            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, NO_MOVE, NO_MOVE, PV_NODE);
             
             return board_eval;
         }
@@ -919,7 +920,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         if (temp_board->eval == INFINITY){
             return INFINITY;
         }
-        
+
         // alpha beta prunning
         if (player == 1){
             if (max_eval < temp_board->eval){
@@ -1117,7 +1118,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
     }
     // print the line of best moves to the terminal (deguggigng)
-    print_line(p1, p2, p1k, p2k, move_tree, 2);
+    //print_line(p1, p2, p1k, p2k, move_tree, 1);
 
     // free the board_tree (since the one ply clone is sent back)
     free_board_data(move_tree);
@@ -1241,8 +1242,9 @@ void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_d
     struct board_data *temp_board;
 
     // while there is a next board search the boards by eval and pick the highest one
-    while (current_board->next_boards != NULL) {
+    while (current_board != NULL) {
         sort_moves(current_board, player);
+        player = 3 - player;
 
         // make the move and print the board
         update_board(&p1, &p2, &p1k, &p2k, current_board->move_start, current_board->move_end);
@@ -1253,9 +1255,6 @@ void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_d
         // update the current board
         current_board = &current_board->next_boards[0];
     }
-
-
-    
 }
 
 
