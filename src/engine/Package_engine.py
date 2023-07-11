@@ -3,7 +3,7 @@ from setuptools import setup, Extension
 def main():
     setup(
         name="search_engine",
-        version="1.0.0",
+        version="1.1.3",
         description="Python interface for searching a given checkers board",
         author="Collin Kees",
         author_email="Collin@kees.net",
