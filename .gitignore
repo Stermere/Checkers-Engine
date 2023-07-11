@@ -1,0 +1,7 @@
+build
+data_set
+dist
+Main.build
+Main.dist
+Main.onefile-build
+src/python/__pycache__
