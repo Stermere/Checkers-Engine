@@ -706,11 +706,6 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
         return depth + 2;
     }
 
-    // if the node is a fail high node, reduce the depth
-    if ((node_type == FAIL_HIGH || node_type == FAIL_LOW)){
-        depth--;
-    }
-
     // late move reduction
     if (depth_abs > 5 && node_num > 5){
         depth--;
