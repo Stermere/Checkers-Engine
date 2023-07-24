@@ -53,7 +53,7 @@ void populate_input(struct neural_net *net, long long int p1, long long int p2, 
     for (int i = 0; i < num_loops; i++){
         shift_amount = shift_map[i];
         if (p1 >> shift_amount & 1 == 1){
-            input_layer->neurons[i].output = 10.0;
+            input_layer->neurons[i].output = 1.0;
             input_layer->neurons[i + 32].output = 0.0;
             input_layer->neurons[i + 64].output = 0.0;
             input_layer->neurons[i + 96].output = 0.0;
@@ -61,7 +61,7 @@ void populate_input(struct neural_net *net, long long int p1, long long int p2, 
         }
         else if (p2 >> shift_amount & 1 == 1){
             input_layer->neurons[i].output = 0.0;
-            input_layer->neurons[i + 32].output = 10.0;
+            input_layer->neurons[i + 32].output = 1.0;
             input_layer->neurons[i + 64].output = 0.0;
             input_layer->neurons[i + 96].output = 0.0;
             input_value = 2.5;
@@ -69,14 +69,14 @@ void populate_input(struct neural_net *net, long long int p1, long long int p2, 
         else if (p1k >> shift_amount & 1 == 1){
             input_layer->neurons[i].output = 0.0;
             input_layer->neurons[i + 32].output = 0.0;
-            input_layer->neurons[i + 64].output = 10.0;
+            input_layer->neurons[i + 64].output = 1.0;
             input_layer->neurons[i + 96].output = 0.0;
         }
         else if (p2k >> shift_amount & 1 == 1){
             input_layer->neurons[i].output = 0.0;
             input_layer->neurons[i + 32].output = 0.0;
             input_layer->neurons[i + 64].output = 0.0;
-            input_layer->neurons[i + 96].output = 10.0;
+            input_layer->neurons[i + 96].output = 1.0;
         }
         else{
             input_layer->neurons[i].output = 0.0;
