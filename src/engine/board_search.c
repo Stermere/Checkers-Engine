@@ -691,7 +691,7 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
     }
 
     // if the node is a horizon node, leave it alone
-    if (depth <= 3) {
+    if (depth <= 2) {
         return depth;
     }
 
@@ -702,7 +702,7 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
     }
 
     // PV line extension
-    if (search_type == SEARCH_TYPE_PV && node_num <= 1) {
+    if (search_type == SEARCH_TYPE_PV && node_num <= 0) {
         return depth + 2;
     }
 
@@ -712,7 +712,7 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
     }
 
     // late move reduction
-    if (depth_abs > 5 && node_num > 5){
+    if (depth_abs > 6 && node_num > 4){
         depth--;
     }
 
@@ -780,15 +780,14 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     }
 
     // check if the moves are being repeated in this line of moves and if so evaluate this as a draw and return
-    if (best_moves->parent->parent->parent->parent->hash == hash)
+    if (best_moves->parent->parent->parent->parent->hash == hash){
         return 0.0f;
+    }
 
     // if the depth is 0 then we are at the end of the standard search so begin the captures search
     if (depth <= 0){
         captures_only = True;
     }
-
-    // TODO optimize this to not malloc memory for the tree and instead just traverse on the fly
 
     // get the moves for this board and player combo or use the moves generated from the last depth search
     if (best_moves->num_moves == -1 || captures_only){
@@ -809,9 +808,6 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         if (num_moves > 0){
             if (best_moves->next_boards == NULL){
                 best_moves->next_boards = malloc(sizeof(struct board_data) * num_moves);  
-            }
-            else {
-                best_moves->next_boards = realloc(best_moves->next_boards, sizeof(struct board_data) * num_moves);
             }
         }
         // fill the next boards with the moves that got them there
@@ -1047,6 +1043,10 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0,
                              move_tree, evaler, hash, 0, SEARCH_TYPE_EXACT, 0);
 
+        // get the end time
+        end = clock();
+        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+
         // if the eval is infinity the search is trying to end
         if (eval_ == INFINITY){
             terminate = 1;
@@ -1065,19 +1065,12 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
             printf("\rPLY: %d\t PLYEX: %d\t Eval: %f", depth, evaler->extended_depth, round_float(eval_));
         }
 
-        // get the end time
-        end = clock();
-        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-
-        // evaluate the position's moves and decide to end early or extend the search time
-        // TODO
-
         if (cpu_time_used > search_time){
             terminate = 1;
         }
 
         // only terminate if the mate value is absolute
-        else if ((eval_ > 200.0 || eval_ < -200.0) && depth >= 5){
+        else if ((eval_ > 500.0 || eval_ < -500.0) && depth >= 8){
             terminate = 1;
         }
 
@@ -1105,7 +1098,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_INTENSITY);
         printf("Search Results:\n");
         SetConsoleTextAttribute(hStdOut, FOREGROUND_GREEN);
-        printf("Hashes stored: %lld\n", evaler->hash_table->num_entries);
+        printf("HashTable Hit ratio: %d\n", (evaler->hash_table->hit_count * 100) / (evaler->hash_table->hit_count + evaler->hash_table->miss_count));
         printf("Nodes: %lld\n", evaler->nodes);
         printf("Time: %fs\n", cpu_time_used);
         SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);

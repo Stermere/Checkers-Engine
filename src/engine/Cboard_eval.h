@@ -114,16 +114,16 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
     if (p1num > p2num){
         eval += (15.0f * (p1num - p2num)) / (p1num + p2num);
         if (p2num < 3)
-            eval += 2.0f;
+            eval += 4.0f;
         if (p2num < 2)
-            eval += 5.0f;
+            eval += 10.0f;
     }
     else if (p2num > p1num){
         eval -= (15.0f * (p2num - p1num)) / (p1num + p2num);
         if (p1num < 3)
-            eval -= 2.0f;
+            eval -= 4.0f;
         else if (p1num < 2)
-            eval -= 5.0f;
+            eval -= 10.0f;
     }
 
     // give a bonus to players with structures on the board that are often good
@@ -200,14 +200,14 @@ float* compute_piece_pos_p2(){
 float* compute_king_pos(){
     float *eval_table = (float*)malloc(sizeof(float) * 64);
         float init_table[8][8] = {
-        {0, 1, 0, 0, 0, 0, 0, 0},
-        {1, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 2, 2, 2, 2, 0, 0}, 
-        {0, 0, 2, 2, 2, 2, 0, 0}, 
-        {0, 0, 2, 2, 2, 2, 0, 0}, 
-        {0, 0, 2, 2, 2, 2, 0, 0}, 
-        {0, 0, 2, 2, 2, 2, 0, 1}, 
-        {0, 0, 0, 0, 0, 0, 1, 0}
+        {0, -1, 0, -3, 0, -1, 0, -3},
+        {-1, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 2, 2, 2, 2, 0, -1}, 
+        {-3, 0, 2, 2, 2, 2, 0, 0}, 
+        {0, 0, 2, 2, 2, 2, 0, -3}, 
+        {-1, 0, 2, 2, 2, 2, 0, 0}, 
+        {0, 0, 2, 2, 2, 2, 0, -1}, 
+        {-3, 0, -1, 0, -3, 0, -1, 0}
         };
     for (int i = 0; i < 64; i++){
         eval_table[i] = init_table[i / 8][i % 8] / 10.0;

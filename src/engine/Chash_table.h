@@ -41,6 +41,8 @@ struct hash_table {
     struct hash_table_entry *table;
     long long int size;
     int num_entries;
+    long long int hit_count;
+    long long int miss_count;
     int pv_retrival_count;
     unsigned long long int* piece_hash_diff;
 };
@@ -58,6 +60,8 @@ struct hash_table* init_hash_table(int size){
     table->size = size;
     table->piece_hash_diff = compute_piece_hash_diffs();
     table->num_entries = 0;
+    table->hit_count = 0;
+    table->miss_count = 0;
 
     return table;
 }
@@ -65,6 +69,8 @@ struct hash_table* init_hash_table(int size){
 // adds a new entry to the hash table (depth should grow as it gets deeper, unlike the search depth which gets smaller)
 void add_hash_entry(struct hash_table *table, unsigned long long int hash, float eval, int depth, int age, int player,
                     short best_move, short refutation_move, char node_type){
+
+    // get the entry and incriment the number of entries
     struct hash_table_entry* entry_index = table->table + (hash % table->size);
     table->num_entries++;
     // check if the entry is empty
@@ -74,9 +80,10 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, float
         // if the entry is populated and the value stored is deamed more relevant return
         if (compare_hash_entries(entry_index, depth, age) && entry_index->hash != hash){
             return;
-            }
+        }
+
     }
-    // if the entry is empty or the value stored is deamed less relevant add the new entry at the old entrys location
+    // if we have not returned yet add the entry
     entry_index->hash = hash;
     entry_index->eval = eval;
     entry_index->depth = depth;
@@ -104,8 +111,8 @@ int check_for_entry(struct hash_table_entry* entry_index, unsigned long long int
 // also return NAN if the age of the entry is older than the current age
 struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth, int player){
     struct hash_table_entry* entry_index = table->table + (hash % table->size);
+
     if (entry_index->hash == hash && entry_index->player == player){
-        // check if the entry is a mate score if so convert it
         float eval = entry_index->eval;
 
         // incriment the pv retrival count if relevent
@@ -117,9 +124,11 @@ struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long 
         }
 
         // return the entry
+        table->hit_count++;
         return entry_index;
     }
     else{
+        table->miss_count++;
         return NULL;
     }
 }
@@ -129,10 +138,10 @@ struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long 
 // note: youger ages are actually larger numbers since age == search_depth the node was added to the table at
 int compare_hash_entries(struct hash_table_entry *entry1, int depth, int age){
     // we always want to keep entrys that are younger as they are more relevant
-    if(entry1->age == age && !abs(entry1->eval) > 500.0f){
+    if(entry1->age > age){
         // less deep entrys store more work but are also less likly to be found again so
         // decide which one to keep is not trivial, for now we will keep the one with the lower depth
-        if (entry1->depth <= depth || entry1->node_type == PV_NODE){
+        if (entry1->depth < depth || entry1->node_type == PV_NODE){
             return 1;
         }
         else{
