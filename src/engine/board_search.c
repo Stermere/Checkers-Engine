@@ -683,8 +683,8 @@ int get_node_type(int search_type, int node_num) {
 
 // a function that decides if a search should be extended or reduced at a certain node
 int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_type,
-                            int player, int alpha, int beta, struct hash_table_entry* table_entry,
-                            struct board_evaler* evaler){
+                            struct hash_table_entry* table_entry,
+                            struct board_evaler* evaler, int jumped){
     // if the depth is to great reduce it to less than 0
     if (depth_abs >= evaler->max_depth){
         return -100;
@@ -702,7 +702,7 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
     }
 
     // PV line extension
-    if (search_type == SEARCH_TYPE_PV && node_num <= 0) {
+    if ((search_type == SEARCH_TYPE_PV) && node_num <= 0) {
         return depth + 2;
     }
 
@@ -712,8 +712,11 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
     }
 
     // late move reduction
-    if (depth_abs > 6 && node_num > 4){
+    if (depth_abs > 4 && node_num > 4){
         depth--;
+        if (depth_abs > 15){
+            depth--;
+        }
     }
 
     return depth;
@@ -897,8 +900,8 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             temp_board->player = player_next;
         }
 
-        // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions
-        int depth_next = should_extend_or_reduce(depth, depth_abs, i, search_type, player, alpha, beta, table_entry, evaler) - 1;
+        // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions0
+        int depth_next = should_extend_or_reduce(depth, depth_abs, i, search_type, table_entry, evaler, (jumped_piece_type != -1)) - 1;
 
         // define the next search type
         int next_search_type = get_node_type(search_type, i);
