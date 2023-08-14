@@ -1102,6 +1102,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         printf("Search Results:\n");
         SetConsoleTextAttribute(hStdOut, FOREGROUND_GREEN);
         printf("HashTable Hit ratio: %d\n", (evaler->hash_table->hit_count * 100) / (evaler->hash_table->hit_count + evaler->hash_table->miss_count));
+        printf("HashTable Usage: %d\n", (evaler->hash_table->num_entries * 100) / evaler->hash_table->size);
         printf("Nodes: %lld\n", evaler->nodes);
         printf("Time: %fs\n", cpu_time_used);
         SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);

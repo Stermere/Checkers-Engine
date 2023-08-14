@@ -18,8 +18,9 @@ struct hash_table_entry;
 struct hash_table;
 unsigned long long int* compute_piece_hash_diffs();
 long long int rand_num();
-int compare_hash_entries(struct hash_table_entry *entry1, int depth, int age);
+struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned long long int hash, int age, int depth);
 struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth, int player);
+struct hash_table_entry* check_for_empty_spot(struct hash_table *table, unsigned long long int hash);
 int check_for_entry(struct hash_table_entry *table, unsigned long long int hash);
 
 // stores the data related to the hashed value
@@ -71,19 +72,17 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, float
                     short best_move, short refutation_move, char node_type){
 
     // get the entry and incriment the number of entries
-    struct hash_table_entry* entry_index = table->table + (hash % table->size);
-    table->num_entries++;
-    // check if the entry is empty
-    if (check_for_entry(entry_index, hash) == 1){
-        table->num_entries--;
-
-        // if the entry is populated and the value stored is deamed more relevant return
-        if (compare_hash_entries(entry_index, depth, age) && entry_index->hash != hash){
-            return;
-        }
-
+    struct hash_table_entry* entry_index = get_storage_index(table, hash, age, depth);
+    if (entry_index == NULL) {
+        return;
     }
-    // if we have not returned yet add the entry
+
+    // check if the entry is empty
+    if (!check_for_entry(entry_index, hash)) {
+        table->num_entries++;
+    }
+
+    // if we have not returned yet add/replace the entry
     entry_index->hash = hash;
     entry_index->eval = eval;
     entry_index->depth = depth;
@@ -97,12 +96,7 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, float
 // check if there is a hash entry for the given hash
 // return 0 if there is no entry, 1 if there is an entry
 int check_for_entry(struct hash_table_entry* entry_index, unsigned long long int hash){
-    if (entry_index->hash == 0llu){
-        return 0;
-    }
-    else {
-        return 1;
-    }
+    return entry_index->hash != 0llu;
 }
 
 
@@ -110,47 +104,62 @@ int check_for_entry(struct hash_table_entry* entry_index, unsigned long long int
 // if the entry does not exits or is the wrong hash value, returns NAN
 // also return NAN if the age of the entry is older than the current age
 struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth, int player){
-    struct hash_table_entry* entry_index = table->table + (hash % table->size);
+    for (int i = 0; i < 4; i++) {
+        struct hash_table_entry* entry_index = table->table + ((hash + (i * i)) % table->size);
 
-    if (entry_index->hash == hash && entry_index->player == player){
-        float eval = entry_index->eval;
+        if (entry_index->hash == hash && entry_index->player == player){
+            float eval = entry_index->eval;
 
-        // incriment the pv retrival count if relevent
-        if (entry_index->node_type == PV_NODE){
-            table->pv_retrival_count++;
+            // incriment the pv retrival count if relevent
+            if (entry_index->node_type == PV_NODE){
+                table->pv_retrival_count++;
+            }
+            else {
+                table->pv_retrival_count = 0;
+            }
+
+            // return the entry
+            table->hit_count++;
+            return entry_index;
         }
-        else {
-            table->pv_retrival_count = 0;
-        }
-
-        // return the entry
-        table->hit_count++;
-        return entry_index;
     }
-    else{
-        table->miss_count++;
-        return NULL;
-    }
+    table->miss_count++;
+    return NULL;
 }
 
-// compare two hash table entries and decide the one to keep
-// returns 1 if entry1 is better, 0 if the new values are better, if they are equal return 0
-// note: youger ages are actually larger numbers since age == search_depth the node was added to the table at
-int compare_hash_entries(struct hash_table_entry *entry1, int depth, int age){
-    // we always want to keep entrys that are younger as they are more relevant
-    if(entry1->age > age){
-        // less deep entrys store more work but are also less likly to be found again so
-        // decide which one to keep is not trivial, for now we will keep the one with the lower depth
-        if (entry1->depth < depth || entry1->node_type == PV_NODE){
-            return 1;
+// returns the index of the hash table that will be replaced by the new entry
+// if there is an empty spot, returns the index of the empty spot
+struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned long long int hash, int age, int depth){
+    struct hash_table_entry* index = check_for_empty_spot(table, hash);
+    if (index != NULL){
+        return index;
+    }
+
+    for (int i = 0; i < 4; i++) {
+        struct hash_table_entry* entry_index = table->table + ((hash + (i * i)) % table->size);
+        if (entry_index->hash == hash){
+            return entry_index;
         }
-        else{
-            return 0;
+
+        else if (entry_index->depth > depth){
+            index = entry_index;
+            depth = entry_index->depth;
         }
     }
-    else {
-        return 0;
+
+    return index;
+}
+
+// checks if any of the spots for this hash value are empty
+// returns the index of the empty spot if there is one, otherwise returns -1
+struct hash_table_entry* check_for_empty_spot(struct hash_table *table, unsigned long long int hash){
+    for (int i = 0; i < 4; i++) {
+        struct hash_table_entry* entry_index = table->table + ((hash + (i * i)) % table->size);
+        if (entry_index->hash == 0llu){
+            return entry_index;
+        }
     }
+    return NULL;
 }
 
 // compute the hash of a board
