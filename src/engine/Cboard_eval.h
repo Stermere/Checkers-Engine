@@ -49,7 +49,7 @@ struct board_evaler* board_evaler_constructor(int search_depth, double time_limi
     // load the neural network
     //evaler->NN_evaler = load_network_from_file("neural_net/neural_net");
     // prepare a table of size 2097152
-    long long int hash_table_size = 1 << 21;
+    long long int hash_table_size = 1 << 18;
     evaler->hash_table = init_hash_table(hash_table_size);
     evaler->killer_table = init_killer_table(search_depth);
     evaler->start_time = start_time;
@@ -75,7 +75,9 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
     int piece_loc_array[64];
     int num_pieces = populate_array(piece_loc, piece_loc_array);
     int p1num = 0;
+    int p1knum = 0;
     int p2num = 0;
+    int p2knum = 0;
     for (int i = 0; i < num_pieces; i++){
         if (p1 >> piece_loc_array[i] & 1){
             eval += 3.0f;
@@ -93,12 +95,14 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
             eval += 5.0f;
             eval += evaluate_pos(3, piece_loc_array[i], evaler);
             p1num++;
+            p1knum++;
 
         }
         else if (p2k >> piece_loc_array[i] & 1){
             eval -= 5.0f;
             eval -= evaluate_pos(4, piece_loc_array[i], evaler);
             p2num++;
+            p2knum++;
         }
     }
 
@@ -124,6 +128,14 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
             eval -= 4.0f;
         else if (p1num < 2)
             eval -= 10.0f;
+    }
+    else if (p1num == p2num){
+        if (p1knum > p2knum){
+            eval += 10.0f / (p1num + p2num);
+        }
+        else if (p2knum > p1knum){
+            eval -= 10.0f / (p1num + p2num);
+        }
     }
 
     // give a bonus to players with structures on the board that are often good
