@@ -41,7 +41,7 @@ struct hash_table_entry {
 struct hash_table {
     struct hash_table_entry *table;
     long long int size;
-    int num_entries;
+    long long int num_entries;
     long long int hit_count;
     long long int miss_count;
     int pv_retrival_count;
@@ -73,6 +73,8 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, float
 
     // get the entry and incriment the number of entries
     struct hash_table_entry* entry_index = get_storage_index(table, hash, age, depth);
+
+
     if (entry_index == NULL) {
         return;
     }
@@ -105,7 +107,7 @@ int check_for_entry(struct hash_table_entry* entry_index, unsigned long long int
 // also return NAN if the age of the entry is older than the current age
 struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth, int player){
     for (int i = 0; i < 4; i++) {
-        struct hash_table_entry* entry_index = table->table + ((hash + (i * i)) % table->size);
+        struct hash_table_entry* entry_index = table->table + ((hash + i) % table->size);
 
         if (entry_index->hash == hash && entry_index->player == player){
             float eval = entry_index->eval;
@@ -136,26 +138,23 @@ struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned lo
     }
 
     for (int i = 0; i < 4; i++) {
-        struct hash_table_entry* entry_index = table->table + ((hash + (i * i)) % table->size);
-        if (entry_index->hash == hash){
-            return entry_index;
-        }
-
-        else if (entry_index->depth > depth){
+        struct hash_table_entry* entry_index = table->table + ((hash + i) % table->size);
+        if (entry_index->depth > depth){
             index = entry_index;
             depth = entry_index->depth;
         }
     }
 
+
     return index;
 }
 
 // checks if any of the spots for this hash value are empty
-// returns the index of the empty spot if there is one, otherwise returns -1
+// returns the index of the empty spot or a entry with the same hash if there is one, otherwise returns -1
 struct hash_table_entry* check_for_empty_spot(struct hash_table *table, unsigned long long int hash){
     for (int i = 0; i < 4; i++) {
-        struct hash_table_entry* entry_index = table->table + ((hash + (i * i)) % table->size);
-        if (entry_index->hash == 0llu){
+        struct hash_table_entry* entry_index = table->table + ((hash + i) % table->size);
+        if (entry_index->hash == 0llu || entry_index->hash == hash){
             return entry_index;
         }
     }
