@@ -714,9 +714,6 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
     // late move reduction
     if (depth_abs > 4 && node_num > 4){
         depth--;
-        if (depth_abs > 15){
-            depth--;
-        }
     }
 
     return depth;
@@ -854,18 +851,12 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             board_eval = (player == 1) ? -1000.0 : 1000.0;
             best_moves->eval = board_eval;
 
-            // store the board in the hash map
-            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, NO_MOVE, NO_MOVE, PV_NODE);
-            
             return board_eval;
         }
         // if there are no moves and captures only is true then we found the end of a catures only search evaluate the position and return
         else{
             board_eval = get_eval(*p1, *p2, *p1k, *p2k, piece_loc, evaler);
             best_moves->eval = board_eval;
-
-            // store the board in the hash map
-            add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, NO_MOVE, NO_MOVE, UNKNOWN_NODE);
             return board_eval;
         }
     }
