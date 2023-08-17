@@ -7,7 +7,6 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
-#include <windows.h>
 // including the Cboard_eval library also includes the set and transposition tables for the engine
 #include "Cboard_eval.h"
 
@@ -50,7 +49,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
 void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k);
 long long n_ply_search(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player, struct set* piece_loc, int* offsets, int depth);
 void quick_sort(struct board_data* ptr, int low, int high);
-int partition(struct board_data ptr, int low, int high);
+int partition(struct board_data* ptr, int low, int high);
 unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, unsigned long long int hash, struct board_evaler* evaler);
 struct board_data* get_best_move(struct board_data *head, int player);
 void end_board_search(struct board_data* best_moves, struct board_evaler* evaler);
@@ -64,7 +63,7 @@ void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_d
 // that represent the possible next moves.
 // the point of this struct is to make a tree of moves that have been traversed and pass it to the next deaper search
 // so that more prunning occurs and the search is faster
-struct board_data {    
+struct board_data {
     float eval;
     unsigned long long int hash;
     struct board_data* parent;
@@ -95,17 +94,17 @@ struct board_data *board_data_constructor(int player, int move_start, int move_e
     board->move_end = move_end;
     board->num_moves = -1;
     board->next_boards = NULL;
-    
+
     // since the head of the tree has no parent set it to a board with hash 0 pointing to itself
     board->parent = malloc(sizeof(struct board_data));
     board->parent->hash = 0;
     board->parent->parent = board->parent;
 
-    // store the hash of 
+    // store the hash of
     return board;
 }
 
-// python comunication code 
+// python comunication code
 
 // make a python extension function that takes a touple as argument
 // and returns a list of integers that represent the best moves for the board
@@ -147,7 +146,7 @@ static PyObject* search_position(PyObject *self, PyObject *args){
 
 // tell the pyhton interpreter about the functions we want to use
 static PyMethodDef c_board_search_methods[] = {
-    {"search_position", search_position, METH_VARARGS, 
+    {"search_position", search_position, METH_VARARGS,
     "takes the 6 64bit integers for the board\
      the first 4 come from convert to bit board, the remaining is the player\
      and the time and depth to search for"},
@@ -197,11 +196,11 @@ void compute_offsets(int* offsets){
         }
         if (i > 55){
             offsets[i * 4 + 2] = 0;
-            offsets[i * 4 + 3] = 0;   
+            offsets[i * 4 + 3] = 0;
         }
         if (i < 8){
             offsets[i * 4 + 0] = 0;
-            offsets[i * 4 + 1] = 0; 
+            offsets[i * 4 + 1] = 0;
         }
     }
 }
@@ -290,7 +289,7 @@ void order_moves(struct board_data* ptr, struct hash_table_entry* entry, struct 
                 ptr->next_boards[i] = ptr->next_boards[sorted_index]; // moving the other move to the other location could be a performance hit
                 ptr->next_boards[sorted_index] = temp;
                 sorted_index++;
-                break;   
+                break;
             }
         }
     }
@@ -304,7 +303,7 @@ void order_moves(struct board_data* ptr, struct hash_table_entry* entry, struct 
                 ptr->next_boards[i] = ptr->next_boards[sorted_index]; // moving the other move to the other location could be a performance hit
                 ptr->next_boards[sorted_index] = temp;
                 sorted_index++;
-                break;     
+                break;
             }
         }
     }
@@ -320,7 +319,7 @@ void order_moves(struct board_data* ptr, struct hash_table_entry* entry, struct 
                 ptr->next_boards[i] = ptr->next_boards[sorted_index]; // moving the other move to the other location could be a performance hit
                 ptr->next_boards[sorted_index] = temp;
                 sorted_index++;
-                break;     
+                break;
             }
         }
     }
@@ -334,13 +333,13 @@ void order_moves(struct board_data* ptr, struct hash_table_entry* entry, struct 
                 ptr->next_boards[i] = ptr->next_boards[sorted_index]; // moving the other move to the other location could be a performance hit
                 ptr->next_boards[sorted_index] = temp;
                 sorted_index++;
-                break;     
+                break;
             }
         }
     }
 }
 
-// takes a pointer to the board_data struct that we want to sort the moves for 
+// takes a pointer to the board_data struct that we want to sort the moves for
 // sorts the array according to the score of the move
 // the pointer to the array that is passed is still the pointer to the array of board_data structs
 // uses the merge sort algorithm
@@ -422,7 +421,7 @@ int get_next_board_state(intLong p1, intLong p2, intLong p1k, intLong p2k, int p
     } else {
         return player ^ 0x3;
     }
-}   
+}
 
 // get the type of piece at the position specified
 int get_piece_at_location(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos){
@@ -554,7 +553,7 @@ unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong 
     return hash;
 }
 
-// generate all possible moves for a given board - 
+// generate all possible moves for a given board -
 // takes the board and a memory location to save to as arguments
 // returns the number of moves generated
 // note: moves should have room for 96 elements as this is the maximum number of moves possible on a legal board
@@ -590,7 +589,7 @@ int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pla
             else {
                 num_moves += move_from_pos;
             }
-        }    
+        }
     }
     return num_moves;
 }
@@ -607,7 +606,7 @@ int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, in
     int piece_type = get_piece_at_location(p1, p2, p1k, p2k, pos);
     // load offsets into a local variable
     int number_offsets[] = {-9, -7, 7, 9};
-    
+
     // set the friendly piece type
     if (piece_type == 1){
         friendly_type = 3;
@@ -668,7 +667,7 @@ int get_node_type(int search_type, int node_num) {
     int next_search_type = search_type;
     if (node_num <= 0 && (search_type == SEARCH_TYPE_PV)) {
         next_search_type = SEARCH_TYPE_EXACT;
-    } 
+    }
 
     else if (node_num <= 0 && search_type == SEARCH_TYPE_EXACT) {
         next_search_type = SEARCH_TYPE_PV;
@@ -744,7 +743,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 
         }
     }
-    
+
     // check if this board has been searched to depth before and if so return the eval from the hash table
     // if the value is not a PV-node then use the info that can be used to prune the search
     struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs, player);
@@ -805,7 +804,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 
         if (num_moves > 0){
             if (best_moves->next_boards == NULL){
-                best_moves->next_boards = malloc(sizeof(struct board_data) * num_moves);  
+                best_moves->next_boards = malloc(sizeof(struct board_data) * num_moves);
             }
         }
         // fill the next boards with the moves that got them there
@@ -899,7 +898,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
                             alpha, beta, captures_only, temp_board, evaler, next_hash,
                             depth_abs + 1, next_search_type, i);
 
-        
+
         // undo the update to the board and piece locations
         undo_piece_locations_update(temp_board->move_start, temp_board->move_end, piece_loc);
         undo_board_update(p1, p2, p1k, p2k, temp_board->move_start, temp_board->move_end, jumped_piece_type, initial_piece_type);
@@ -914,7 +913,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             if (max_eval < temp_board->eval){
                 max_eval = temp_board->eval;
                 // set the best move
-                best_move = (temp_board->move_start << 8) | temp_board->move_end; 
+                best_move = (temp_board->move_start << 8) | temp_board->move_end;
             }
             // if the max eval is now greater than before then this is the refutation move
             if (max_eval > alpha){
@@ -952,7 +951,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     // once all the moves have been searched set the eval of this board to the best move found and return the best eval
     if (player == 1)
         board_eval = max_eval;
-    else 
+    else
         board_eval = min_eval;
     // update the eval of this board
     best_moves->eval = board_eval;
@@ -974,11 +973,11 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 
     // store the eval in the hash table
     add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, best_move, refutation_move, node_type);
-    
+
     // if the eval is a mating eval update it to reflect how far it traveled up the tree
     board_eval = (board_eval > 500.0f) ? board_eval - 1 : board_eval;
     board_eval = (board_eval < -500.0f) ? board_eval + 1 : board_eval;
-    
+
     return board_eval;
 }
 
@@ -987,13 +986,10 @@ float round_float(float num){
     return (float)((int)(num * 100 + 0.5)) / 100;
 }
 
-// prepare needed memory for a search and call the search function to find the best move and return a pointer to the memory 
+// prepare needed memory for a search and call the search function to find the best move and return a pointer to the memory
 // location that holds the moves for the board ordered in the order best to worst
 struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth){
     struct search_info* return_struct = malloc(sizeof(struct search_info));
-
-    // handle for colored terminal output
-    HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 
     // malloc the data needed for the array (data needed is num spaces * nummovedir * sizeof(int))
     int* piece_offsets = malloc(sizeof(int) * 64 * 4);
@@ -1003,7 +999,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     // the tree will be stored in a linked list of best_move structs (populated during search)
     struct board_data* move_tree = board_data_constructor(player, -1, -1);
     clock_t start_time = clock();
-    struct board_evaler* evaler = board_evaler_constructor(search_depth, search_time, start_time); 
+    struct board_evaler* evaler = board_evaler_constructor(search_depth, search_time, start_time);
     struct board_data* best_moves_clone = board_data_constructor(player, -1, -1);
     best_moves_clone->next_boards = NULL;
     best_moves_clone->parent = move_tree->parent;
@@ -1085,24 +1081,17 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     }
 
     // print the output of the engine
-    SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
     if (PRINT_OUTPUT) {
         printf("\r                                                                   \r");
-        SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_INTENSITY);
         printf("Search Results:\n");
-        SetConsoleTextAttribute(hStdOut, FOREGROUND_GREEN);
         printf("HashTable Hit ratio: %d\n", (evaler->hash_table->hit_count * 100) / (evaler->hash_table->hit_count + evaler->hash_table->miss_count));
         printf("HashTable Usage: %d\n", (evaler->hash_table->num_entries * 100) / evaler->hash_table->size);
         printf("Nodes: %lld\n", evaler->nodes);
         printf("Time: %fs\n", cpu_time_used);
-        SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
         printf("Depth: %d\n", evaler->extended_depth);
         printf("Avg depth: %lld\n", evaler->avg_depth / evaler->nodes);
 
         printf("Eval: %f\n\n", round_float(best_moves_clone->eval));
-
-        // set the text color to white
-        SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
     }
     // print the line of best moves to the terminal (deguggigng)
     //print_line(p1, p2, p1k, p2k, move_tree, 1);
@@ -1116,7 +1105,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
 
     return_struct->head = best_moves_clone;
     return_struct->evaler = evaler;
-    
+
     // return the best moves and evaler
     return return_struct;
 }
@@ -1191,7 +1180,7 @@ long long n_ply_search(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int
         undo_piece_locations_update(pos_init, pos_final, piece_loc);
         undo_board_update(p1, p2, p1k, p2k, pos_init, pos_final, jumped_piece_type, intitial_piece_type);
     }
-    
+
     return total_boards;
 
 }

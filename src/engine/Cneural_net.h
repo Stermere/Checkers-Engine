@@ -15,7 +15,7 @@ double transfer_tanh(double activation);
 double transfer_relu(double activation);
 double error_relu_hidden(double weight, double error, double activation);
 double error_tanh_out(double activation, double target);
-void update_weights(struct neural_net *net, double learning_rate);
+void update_weights(struct neural_net *net, double learning_rate, int batch_size);
 double transfer_tanh_deriv(double activation);
 double error_relu_out(double activation, double target);
 
@@ -32,7 +32,7 @@ double get_output(struct neural_net *net, long long int p1, long long int p2, lo
     return net->layers[net->num_layers - 1].neurons[0].output;
 }
 
-    
+
 // put the input in to the first layers output
 void populate_input(struct neural_net *net, long long int p1, long long int p2, long long int p1k, long long int p2k){
     struct layer *input_layer = net->layers;
@@ -154,7 +154,7 @@ void forward_propagate(struct neural_net *net){
         for (int j = 0; j < num_neurons; j++){
             activation(current_layer->neurons + j, last_layer, squish_val);
             current_layer->neurons[j].output = transfer_relu(current_layer->neurons[j].output);
-            
+
         }
         current_layer_index++;
         last_layer = current_layer;
@@ -177,7 +177,7 @@ double transfer_tanh(double activation){
 // returns the derivative of the tanh function
 double transfer_tanh_deriv(double activation){
     double temp = transfer_tanh(activation);
-    return 1.0 - (temp * temp); 
+    return 1.0 - (temp * temp);
 }
 
 // return the error of the output
@@ -240,7 +240,7 @@ void activation(struct neuron *n, struct layer *last_layer, double squish_val){
     sum1 = sum1 + sum2;
     sum3 = sum3 + sum4;
     sum1 = sum1 + sum3;
- 
+
     //set the output
     n->output = sum1 * squish_val;
 }
