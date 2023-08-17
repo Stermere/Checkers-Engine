@@ -22,9 +22,10 @@ def start_search(board : list, player : int, p_time : int, ply : int, return_dic
 
     # update the return dict
     return_dict["depth"] = results[-1][0]
-    return_dict["leafs"] = results[-1][1]
-    return_dict["eval"] = results[-1][3]
-    return_dict["hashes"] = results[-1][2]
+    return_dict["depth_extended"] = results[-1][1]
+    return_dict["leafs"] = results[-1][2]
+    return_dict["eval"] = results[-1][4]
+    return_dict["hashes"] = results[-1][3]
 
     # save the object in a touple interpretation to sent it back to the main thread
     return_dict["minmax"] = results
