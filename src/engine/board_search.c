@@ -690,10 +690,6 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
         return -100;
     }
 
-    // if the node is a horizon node, leave it alone
-    if (depth <= 2) {
-        return depth;
-    }
 
     // extract the node type from the table entry
     int node_type = UNKNOWN_NODE;
@@ -702,8 +698,8 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
     }
 
     // PV line extension
-    if ((search_type == SEARCH_TYPE_PV) && node_num <= 0) {
-        return depth + 2;
+    if (search_type == SEARCH_TYPE_PV || node_type == PV_NODE) {
+        return depth + 1;
     }
 
     // if the node is a fail high node, reduce the depth
@@ -712,7 +708,7 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
     }
 
     // late move reduction
-    if (depth_abs > 4 && node_num > 4){
+    if (depth_abs > 4 && node_num > 5){
         depth--;
     }
 
@@ -760,21 +756,23 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
                 min_eval = table_entry->eval;
                 max_eval = table_entry->eval;
             }
-            else if (table_entry->node_type == FAIL_HIGH){
-                max_eval = table_entry->eval;
-                // in some cases this is good enough to cause a instant cutoff
-                if (max_eval >= beta){
-                    best_moves->eval = max_eval;
-                    return max_eval;
-                }
+            max_eval = table_entry->eval;
+            // in some cases this is good enough to cause a instant cutoff
+            if (max_eval >= beta){
+                best_moves->eval = max_eval;
+                // if the eval is a mating eval update it to reflect how far it traveled up the tree
+                max_eval = (max_eval > 500.0f) ? max_eval - 1 : max_eval;
+                max_eval = (max_eval < -500.0f) ? max_eval + 1 : max_eval;
+                return max_eval;
             }
-            else if (table_entry->node_type == FAIL_LOW){
-                min_eval = table_entry->eval;
-                // in some cases this is good enough to cause a instant cutoff
-                if (min_eval <= alpha){
-                    best_moves->eval = min_eval;
-                    return min_eval;
-                }
+            min_eval = table_entry->eval;
+            // in some cases this is good enough to cause a instant cutoff
+            if (min_eval <= alpha){
+                best_moves->eval = min_eval;
+                // if the eval is a mating eval update it to reflect how far it traveled up the tree
+                min_eval = (min_eval > 500.0f) ? min_eval - 1 : min_eval;
+                min_eval = (min_eval < -500.0f) ? min_eval + 1 : min_eval;
+                return min_eval;
             }
         }
     }
@@ -973,12 +971,13 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     else if (board_eval >= beta){
         node_type = FAIL_HIGH;
     }
-    // if the eval is a mating eval update it to reflect how far it traveled up the tree
-    board_eval = (board_eval > 500.0f) ? board_eval - 1 : board_eval;
-    board_eval = (board_eval < -500.0f) ? board_eval + 1 : board_eval;
 
     // store the eval in the hash table
     add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, best_move, refutation_move, node_type);
+    
+    // if the eval is a mating eval update it to reflect how far it traveled up the tree
+    board_eval = (board_eval > 500.0f) ? board_eval - 1 : board_eval;
+    board_eval = (board_eval < -500.0f) ? board_eval + 1 : board_eval;
     
     return board_eval;
 }
@@ -1018,9 +1017,11 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     double cpu_time_used;
     int depth;
     int extended_depth;
-    int terminate = 0;
+    int terminate = -5; // allows continued search after mate is found
     start = clock();
     evaler->start_time = start;
+    evaler->alpha = -INFINITY;
+    evaler->beta = INFINITY;
 
     // call the search function
     for (int i = 1; i <= search_depth; i++){
@@ -1030,8 +1031,6 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         // update the evalers search depth
         evaler->search_depth = i;
         evaler->max_depth = min(max(i * 2, 10), search_depth);
-        evaler->alpha = -INFINITY;
-        evaler->beta = INFINITY;
 
         // call the search function and recurse
         eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0,
@@ -1064,12 +1063,12 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
 
         // only terminate if the mate value is absolute
-        else if ((eval_ > 500.0 || eval_ < -500.0) && depth >= 8){
-            terminate = 1;
+        else if (eval_ > 500.0 || eval_ < -500.0){
+            terminate++;
         }
 
         // if there is only one move only look a few moves ahead
-        else if (move_tree->num_moves == 1 && depth >= 5){
+        else if (move_tree->num_moves == 1){
             terminate = 1;
         }
 
