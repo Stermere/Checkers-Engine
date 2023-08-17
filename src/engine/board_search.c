@@ -134,7 +134,7 @@ static PyObject* search_position(PyObject *self, PyObject *args){
     PyList_Append(py_list, py_tuple);
 
     // get some stats about the search
-    py_tuple = Py_BuildValue("KKKf", board_info->evaler->extended_depth, board_info->evaler->nodes, board_info->evaler->hash_table->num_entries, best_move->eval);
+    py_tuple = Py_BuildValue("KKKKf", board_info->evaler->search_depth, board_info->evaler->extended_depth, board_info->evaler->nodes, board_info->evaler->hash_table->num_entries, best_move->eval);
     PyList_Append(py_list, py_tuple);
 
     // free the search tree the evaler and the transposition table
@@ -1030,7 +1030,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
         // update the evalers search depth
         evaler->search_depth = i;
-        evaler->max_depth = min(max(i * 2, 10), search_depth);
+        evaler->max_depth = min(max(i + 10, 5), search_depth);
 
         // call the search function and recurse
         eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0,

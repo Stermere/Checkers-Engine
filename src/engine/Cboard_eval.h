@@ -145,6 +145,12 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
     if (p2 & 0x22 ^ 0x22 == 0){
         eval -= 0.5f;
     }
+    if (p1 & 0x10201000000 ^ 0x10201000000 == 0){
+        eval += 0.5f;
+    }
+    if (p2 & 0x8040800000 ^ 0x8040800000 == 0){
+        eval -= 0.5f;
+    }
 
     return eval;
 }
@@ -169,9 +175,9 @@ float evaluate_pos(int type, int pos, struct board_evaler* evaler){
 float* compute_piece_pos_p1(){
     float *eval_table = (float*)malloc(sizeof(float) * 64);
     float table[8][8] = { 
-        {0, 1, 5, 5, 5, 5, 1, 0},
-        {0, 1, 3, 3, 3, 3, 1, 0},
-        {0, 0, 3, 3, 2, 2, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 3, 0, 3, 0, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
         {0, 1, 1, 1, 1, 1, 0, 0},
         {1, 0, 1, 1, 1, 1, 1, 0},
@@ -194,9 +200,9 @@ float* compute_piece_pos_p2(){
         {0, 1, 1, 1, 1, 1, 0, 1},
         {0, 0, 1, 1, 1, 1, 1, 0},
         {0, 0, 1, 1, 1, 1, 0, 0},
-        {0, 0, 2, 2, 3, 3, 0, 0},
-        {0, 1, 3, 3, 3, 3, 1, 0},
-        {0, 1, 5, 5, 5, 5, 1, 0}
+        {0, 0, 3, 0, 3, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0}
     };
     for (int i = 0; i < 64; i++){
         eval_table[i] = table[i / 8][i % 8]/ 10.0;
