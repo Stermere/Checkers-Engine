@@ -14,6 +14,7 @@ float* compute_piece_pos_p2();
 float* compute_king_pos();
 struct board_evaler;
 float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, struct set* piece_loc, struct board_evaler* evaler);
+float is_runaway_piece(long long p1, long long p2, long long p1k, long long p2k, int type, int pos);
 float evaluate_pos(int type, int pos, struct board_evaler* evaler);
 
 
@@ -82,12 +83,14 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
         if (p1 >> piece_loc_array[i] & 1){
             eval += 3.0f;
             eval += evaluate_pos(1, piece_loc_array[i], evaler);
+            eval += is_runaway_piece(p1, p2, p1k, p2k, 1, piece_loc_array[i]);
             p1num++;
 
         }
         else if (p2 >> piece_loc_array[i] & 1){
             eval -= 3.0f;
             eval -= evaluate_pos(2, piece_loc_array[i], evaler);
+            eval -= is_runaway_piece(p1, p2, p1k, p2k, 2, piece_loc_array[i]);
             p2num++;
             
         }
@@ -169,6 +172,79 @@ float evaluate_pos(int type, int pos, struct board_evaler* evaler){
     else if (type == 4){
         return evaler->king_pos_map[pos];
     }
+}
+
+// check if a piece is a runnaway piece (a piece that has a clear path to the other side of the board)
+float is_runaway_piece(long long p1, long long p2, long long p1k, long long p2k, int type, int pos) {
+    long long check;
+    int dir;
+    if (type == 3 || type == 4) {
+        return 0.0f;
+    }
+
+    if (type == 1) {
+        check = p2 | p2k;
+        dir = -1;
+    } else {
+        check = p1 | p1k;
+        dir = 1;
+    }
+
+    // make a bit make of every position that this piece could reach
+    long long mask = 0;
+    int i = pos;
+    int placed = 0;
+
+
+    i += dir * 7;
+    while (i >= 0 && i < 64 && (i % 8 != 0 && i % 8 != 7)) {
+        mask |= 1ll << i;
+        i += dir * 7;
+        placed = 1;
+    }
+    while (i >= 0 && i < 64 && placed == 1) {
+        mask |= 1ll << i;
+        i += dir * 8;
+    }
+
+    i = pos;
+    i += dir * 9;
+    placed = 0;
+    while (i >= 0 && i < 64 && (i % 8 != 7 && i % 8 != 0)) {
+        mask |= 1ll << i;
+        i += dir * 9;
+        placed = 1;
+    }
+    while (i >= 0 && i < 64 && placed == 1) {
+        mask |= 1ll << i;
+        i += dir * 8;
+    }
+
+    // fill in the middle
+    i = pos + dir;
+    long long masker = 0;
+    while (i >= 0 && i < 64) {
+        if ((mask & (1ll << i))) {
+            masker = !masker;
+            i += dir;
+            continue;
+        }
+
+        mask |= masker << i;
+        if (i % 8 == 0 || i % 8 == 7) {
+            masker = 0;
+        }
+        i += dir;
+
+    }
+     
+    // check if the mask has any enemy pieces in it
+    if ((mask & check) == 0) {
+        return 0.5f;
+    }
+
+    return 0.0f;
+    
 }
 
 // compute the array of piece positions containing how good it is to have a piece at each position
