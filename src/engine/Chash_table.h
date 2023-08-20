@@ -12,6 +12,8 @@
 #define NULL_MOVE 4
 #define NO_MOVE 0 // no move was found
 
+#define MT_STATE_SIZE 624
+
 
 // define functions
 struct hash_table_entry;
@@ -22,6 +24,8 @@ struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned lo
 struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth, int player);
 struct hash_table_entry* check_for_empty_spot(struct hash_table *table, unsigned long long int hash);
 int check_for_entry(struct hash_table_entry *table, unsigned long long int hash);
+void mt_init(struct mt_state *state, unsigned long long seed);
+unsigned long long mt_rand(struct mt_state *state);
 
 // stores the data related to the hashed value
 // ie. the hash, its evaluation, what is the type of fail (fail high or fail low, or true value), the best move, etc.
@@ -48,14 +52,29 @@ struct hash_table {
     unsigned long long int* piece_hash_diff;
 };
 
+// Define the structure for the Mersenne Twister rng
+struct mt_state {
+    unsigned long long mt[MT_STATE_SIZE];
+    int index;
+};
+
 // initializes the hash table
 struct hash_table* init_hash_table(int size){
     struct hash_table *table = (struct hash_table*)malloc(sizeof(struct hash_table));
-    table->table = (struct hash_table_entry*)malloc(sizeof(struct hash_table_entry) * size);
+    table->table = (struct hash_table_entry*)calloc(size, sizeof(struct hash_table_entry));
     // check for allocation failiure and exit if it does
     if (table->table == NULL){
         printf("Error: failed to allocate memory for hash table\n");
         exit(1);
+    }
+
+    // print the size and step through each entry checking for allocation failiure
+    printf("Hash table size: %d\n", size);
+    for (int i = 0; i < size; i++){
+        if (table->table[i].hash != 0llu){
+            printf("Error: failed to allocate memory for hash table\n");
+            exit(1);
+        }
     }
 
     table->size = size;
@@ -109,9 +128,7 @@ struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long 
     for (int i = 0; i < 4; i++) {
         struct hash_table_entry* entry_index = table->table + ((hash + i) % table->size);
 
-        if (entry_index->hash == hash && entry_index->player == player){
-            float eval = entry_index->eval;
-
+        if (entry_index->hash == hash){
             // incriment the pv retrival count if relevent
             if (entry_index->node_type == PV_NODE){
                 table->pv_retrival_count++;
@@ -184,16 +201,46 @@ unsigned long long int get_hash(unsigned long long int p1, unsigned long long in
 // compute the hash table piece diffs for quickly computing hashes of boards
 unsigned long long int* compute_piece_hash_diffs(){
     srand(time(NULL));
+    struct mt_state rng_state;
+    mt_init(&rng_state, time(NULL));
     long long int* piece_hash_diffs = (long long int*)malloc(sizeof(long long int) * (64 * 4));
     for (int i = 0; i < (64 * 4); i++){
-        piece_hash_diffs[i] = rand_num();
+        piece_hash_diffs[i] = mt_rand(&rng_state);
     }
     return piece_hash_diffs;
 }
 
-// sudo random 64 bit number generator
-long long int rand_num(){
-    return (((unsigned long long int)rand() << 48) | ((unsigned long long int)rand() << 32) | ((unsigned long long int)rand() << 16) | (unsigned long long int)rand());
+// Initialize the Mersenne Twister state with a seed
+void mt_init(struct mt_state *state, unsigned long long seed) {
+    state->mt[0] = seed;
+    for (int i = 1; i < MT_STATE_SIZE; ++i) {
+        state->mt[i] = 0xFFFFFFFFFFFFFFFFull & (6364136223846793005ull * (state->mt[i - 1] ^ (state->mt[i - 1] >> 62)) + i);
+    }
+    state->index = MT_STATE_SIZE;
+}
+
+// Generate a 64-bit random number using the Mersenne Twister algorithm
+unsigned long long mt_rand(struct mt_state *state) {
+    if (state->index >= MT_STATE_SIZE) {
+        for (int i = 0; i < MT_STATE_SIZE; ++i) {
+            unsigned long long y = (state->mt[i] & 0x8000000000000000ull) + (state->mt[(i + 1) % MT_STATE_SIZE] & 0x7FFFFFFFFFFFFFFFull);
+            state->mt[i] = state->mt[(i + 397) % MT_STATE_SIZE] ^ (y >> 1);
+            if (y % 2 != 0) {
+                state->mt[i] ^= 0x9D2C5680u;
+            }
+        }
+        state->index = 0;
+    }
+
+    unsigned long long y = state->mt[state->index];
+    y ^= (y >> 29) & 0x5555555555555555ull;
+    y ^= (y << 17) & 0x71D67FFFEDA60000ull;
+    y ^= (y << 37) & 0xFFF7EEE000000000ull;
+    y ^= y >> 43;
+
+    state->index++;
+
+    return y;
 }
 
 // frees the hash table
