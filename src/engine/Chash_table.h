@@ -69,7 +69,6 @@ struct hash_table* init_hash_table(int size){
     }
 
     // print the size and step through each entry checking for allocation failiure
-    printf("Hash table size: %d\n", size);
     for (int i = 0; i < size; i++){
         if (table->table[i].hash != 0llu){
             printf("Error: failed to allocate memory for hash table\n");
