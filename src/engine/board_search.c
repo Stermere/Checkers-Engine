@@ -55,7 +55,7 @@ unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong 
 struct board_data* get_best_move(struct board_data *head, int player);
 void end_board_search(struct board_data* best_moves, struct board_evaler* evaler);
 int free_board_data(struct board_data* data);
-void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_data* head, int player);
+void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, unsigned long long hash, struct board_evaler* evaler);
 
 // for some reason this has to be above the python stuff even if it is defined, otherwise it doesn't work
 
@@ -713,7 +713,7 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
 // search the board for the best move recursivly and return the best eval that can be achived from that board position
 // the best_moves struct will be populated to the search depth at the end of this search
 float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
-    struct set* piece_loc, int* offsets, int depth, float alpha, float beta, int captures_only, struct board_data* best_moves,
+    struct set* piece_loc, int* offsets, int depth, float alpha, float beta, int captures_only, struct board_data* move_tree,
     struct board_evaler* evaler, unsigned long long int hash, int depth_abs, int search_type, int node_num){
     // setup variables
     int player_next;
@@ -742,7 +742,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     
     // check if this board has been searched to depth before and if so return the eval from the hash table
     // if the value is not a PV-node then use the info that can be used to prune the search
-    struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs, player);
+    struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs);
     if (table_entry != NULL){
         // if the entry is usable set max and min eval or just return the eval if it is a PV-node
         // if it is not the entry will still be used for move ordering
@@ -754,7 +754,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             max_eval = table_entry->eval;
             // in some cases this is good enough to cause a instant cutoff
             if (max_eval >= beta){
-                best_moves->eval = max_eval;
+                move_tree->eval = max_eval;
                 // if the eval is a mating eval update it to reflect how far it traveled up the tree
                 max_eval = (max_eval > 500.0f) ? max_eval - 1 : max_eval;
                 max_eval = (max_eval < -500.0f) ? max_eval + 1 : max_eval;
@@ -763,7 +763,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             min_eval = table_entry->eval;
             // in some cases this is good enough to cause a instant cutoff
             if (min_eval <= alpha){
-                best_moves->eval = min_eval;
+                move_tree->eval = min_eval;
                 // if the eval is a mating eval update it to reflect how far it traveled up the tree
                 min_eval = (min_eval > 500.0f) ? min_eval - 1 : min_eval;
                 min_eval = (min_eval < -500.0f) ? min_eval + 1 : min_eval;
@@ -773,7 +773,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     }
 
     // check if the moves are being repeated in this line of moves and if so evaluate this as a draw and return
-    if (best_moves->parent->parent->parent->parent->hash == hash){
+    if (move_tree->parent->parent->parent->parent->hash == hash){
         return 0.0f;
     }
 
@@ -789,32 +789,32 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     // get the moves for this board and player combo
     int moves[96];
     num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, offsets, captures_only);
-    best_moves->num_moves = num_moves;
-    best_moves->player = player;
+    move_tree->num_moves = num_moves;
+    move_tree->player = player;
 
     if (num_moves > 0){
-        if (best_moves->next_boards == NULL){
+        if (move_tree->next_boards == NULL){
             struct board_data next_boards[96];
-            best_moves->next_boards = next_boards;
+            move_tree->next_boards = next_boards;
         }
     }
 
     // fill the next struct
     for (int i = 0; i < num_moves; i++){
-        temp_board = best_moves->next_boards + i;
+        temp_board = move_tree->next_boards + i;
         temp_board->move_start = moves[i * 2];
         temp_board->move_end = moves[(i * 2) + 1];
         temp_board->num_moves = -1;
         temp_board->player = -1;
         temp_board->next_boards = NULL;
         temp_board->hash = 0ull;
-        temp_board->parent = best_moves;
+        temp_board->parent = move_tree;
     }
 
     // before continuing from this block of code, check if the hash table has a value for this board
     // if it does then use that to order the moves
     if (table_entry != NULL && num_moves > 0){
-        order_moves(best_moves, table_entry, evaler->killer_table->table + depth_abs);
+        order_moves(move_tree, table_entry, evaler->killer_table->table + depth_abs);
     }
 
 
@@ -824,14 +824,14 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         // if there are no moves and captures only is false then a win has occured eval who won and return
         if (!captures_only){
             board_eval = (player == 1) ? -1000.0 : 1000.0;
-            best_moves->eval = board_eval;
+            move_tree->eval = board_eval;
 
             return board_eval;
         }
         // if there are no moves and captures only is true then we found the end of a catures only search evaluate the position and return
         else{
             board_eval = get_eval(*p1, *p2, *p1k, *p2k, piece_loc, evaler);
-            best_moves->eval = board_eval;
+            move_tree->eval = board_eval;
             return board_eval;
         }
     }
@@ -842,10 +842,10 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     // the the next boards are ready to be searched so begin the search!
     short best_move = NO_MOVE;
     short refutation_move = NO_MOVE;
-    temp_board = best_moves->next_boards;
+    temp_board = move_tree->next_boards;
     for (int i = 0; i < num_moves; i++){
         // get the board data for the next move
-        temp_board = best_moves->next_boards + i;
+        temp_board = move_tree->next_boards + i;
 
         // get the hash for this next board (always do this before the move is made on the board)
         next_hash = update_hash(*p1, *p2, *p1k, *p2k, temp_board->move_start, temp_board->move_end, hash, evaler);
@@ -899,7 +899,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             }
             // prune if a cut off occurs
             if (alpha > beta){
-                best_moves->prunned_loc = i + 1;
+                move_tree->prunned_loc = i + 1;
                 update_killer_table(evaler->killer_table, depth_abs, temp_board->move_start, temp_board->move_end);
                 break;
             }
@@ -917,7 +917,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             }
             // prune if a cut off occurs
             if (alpha > beta){
-                best_moves->prunned_loc = i + 1;
+                move_tree->prunned_loc = i + 1;
                 update_killer_table(evaler->killer_table, depth_abs, temp_board->move_start, temp_board->move_end);
                 break;
             }
@@ -931,7 +931,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         board_eval = min_eval;
 
     // update the eval of this board
-    best_moves->eval = board_eval;
+    move_tree->eval = board_eval;
 
     // store the eval in the hash table (must find the type of node first before storing it)
     // find node type by seeing if this node caused a alpha/beta cutoff
@@ -1057,7 +1057,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
         for (int i = 0; i < num_moves; i++){
             unsigned long long next_hash = update_hash(p1, p2, p1k, p2k, moves[i * 2], moves[(i * 2) + 1], hash, evaler);
-            struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, next_hash, evaler->search_depth, 1, player);
+            struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, next_hash, evaler->search_depth, 1);
             struct board_data* temp_board = move_tree_clone->next_boards + i;
             temp_board->move_start = moves[i * 2];
             temp_board->move_end = moves[(i * 2) + 1];
@@ -1068,11 +1068,8 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
             temp_board->parent = move_tree_clone;
             if (table_entry != NULL)
                 temp_board->eval = table_entry->eval;
-        }
-
-        // print the eval of each move
-        for (int i = 0; i < num_moves; i++){
-            printf("Move: %d\t Eval: %f\n", (move_tree_clone->next_boards + i)->move_start, (move_tree_clone->next_boards + i)->eval);
+            else
+                temp_board->eval = 0.0f;
         }
     }
 
@@ -1098,7 +1095,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     }
 
     // print the line of best moves to the terminal (deguggigng)
-    //print_line(p1, p2, p1k, p2k, move_tree, player);
+    print_line(p1, p2, p1k, p2k, hash, evaler);
 
 
     free(piece_offsets);
@@ -1201,24 +1198,22 @@ void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k){
 }
 
 // print the expected line to standard out in a human readable format (for debugging)
-void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, struct board_data* head, int player){
-    struct board_data *current_board = head;
-    struct board_data *temp_board;
+void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, unsigned long long hash, struct board_evaler* evaler){
+    // use the hash table to make the line of moves
+    int depth = 0;
+    while (True) {
+        struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth);
+        if (table_entry == NULL || table_entry->best_move == NO_MOVE){
+            break;
+        }
+        
+        printf("%d %d\n", table_entry->best_move >> 8, table_entry->best_move & 0xFF);
 
-    // while there is a next board search the boards by eval and pick the highest one
-    while (current_board != NULL) {
-        sort_moves(current_board, player);
-        player = 3 - player;
-
-        // make the move and print the board
-        update_board(&p1, &p2, &p1k, &p2k, current_board->move_start, current_board->move_end);
-
-        // print the board
-        human_readble_board(p1, p2, p1k, p2k);
-
-        // update the current board
-        current_board = &current_board->next_boards[0];
+        hash = update_hash(p1, p2, p1k, p2k, table_entry->best_move >> 8, table_entry->best_move & 0xFF, hash, evaler);
+        update_board(&p1, &p2, &p1k, &p2k, table_entry->best_move >> 8, table_entry->best_move & 0xFF);
+        depth++;
     }
+    human_readble_board(p1, p2, p1k, p2k);
 }
 
 
