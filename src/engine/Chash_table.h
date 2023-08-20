@@ -21,7 +21,7 @@ struct hash_table;
 unsigned long long int* compute_piece_hash_diffs();
 long long int rand_num();
 struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned long long int hash, int age, int depth);
-struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth, int player);
+struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth);
 struct hash_table_entry* check_for_empty_spot(struct hash_table *table, unsigned long long int hash);
 int check_for_entry(struct hash_table_entry *table, unsigned long long int hash);
 void mt_init(struct mt_state *state, unsigned long long seed);
@@ -121,10 +121,8 @@ int check_for_entry(struct hash_table_entry* entry_index, unsigned long long int
 }
 
 
-// returns the eval of a hash table entry if it exists and is the right hash value
-// if the entry does not exits or is the wrong hash value, returns NAN
-// also return NAN if the age of the entry is older than the current age
-struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth, int player){
+// returns the entry for the given hash
+struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth){
     for (int i = 0; i < 4; i++) {
         struct hash_table_entry* entry_index = table->table + ((hash + i) % table->size);
 

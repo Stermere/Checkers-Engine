@@ -15,7 +15,7 @@ double transfer_tanh(double activation);
 double transfer_relu(double activation);
 double error_relu_hidden(double weight, double error, double activation);
 double error_tanh_out(double activation, double target);
-void update_weights(struct neural_net *net, double learning_rate);
+void update_weights(struct neural_net *net, double learning_rate, int batch_size);
 double transfer_tanh_deriv(double activation);
 double error_relu_out(double activation, double target);
 

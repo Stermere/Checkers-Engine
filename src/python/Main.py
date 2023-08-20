@@ -11,7 +11,6 @@ from Board_opperations import Board, check_jump_required, update_board, check_wi
 import multiprocessing as mp
 
 # import the search engine
-sys.path.insert(0, os.getcwd() + "/build/lib.win-amd64-3.9/")
 import search_engine
 
 
