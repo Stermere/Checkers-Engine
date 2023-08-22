@@ -13,6 +13,7 @@
 #define NO_MOVE 0 // no move was found
 
 #define MT_STATE_SIZE 624
+#define NUMBER_OF_BUCKETS 4
 
 
 // define functions
@@ -37,7 +38,6 @@ struct hash_table_entry {
     int player;
     // moves are stored in a format of: top byte is the start square, bottom byte is the end square
     short best_move;
-    short refutation_move;
     char node_type;
 };
 
@@ -45,6 +45,7 @@ struct hash_table_entry {
 struct hash_table {
     struct hash_table_entry *table;
     long long int size;
+    long long int total_size;
     long long int num_entries;
     long long int hit_count;
     long long int miss_count;
@@ -68,30 +69,22 @@ struct hash_table* init_hash_table(int size){
         exit(1);
     }
 
-    // print the size and step through each entry checking for allocation failiure
-    for (int i = 0; i < size; i++){
-        if (table->table[i].hash != 0llu){
-            printf("Error: failed to allocate memory for hash table\n");
-            exit(1);
-        }
-    }
-
-    table->size = size;
+    table->size = (size - (size % 4)) / 4; // 4 buckets per hash value
+    table->total_size = size;
     table->piece_hash_diff = compute_piece_hash_diffs();
-    table->num_entries = 0;
-    table->hit_count = 0;
-    table->miss_count = 0;
+    table->num_entries = 1;
+    table->hit_count = 1;
+    table->miss_count = 1;
 
     return table;
 }
 
-// adds a new entry to the hash table (depth should grow as it gets deeper, unlike the search depth which gets smaller)
+// adds a new entry to the hash table (depth is the depth remaining at the node)
 void add_hash_entry(struct hash_table *table, unsigned long long int hash, float eval, int depth, int age, int player,
-                    short best_move, short refutation_move, char node_type){
+                    short best_move, char node_type){
 
     // get the entry and incriment the number of entries
     struct hash_table_entry* entry_index = get_storage_index(table, hash, age, depth);
-
 
     if (entry_index == NULL) {
         return;
@@ -103,14 +96,17 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, float
     }
 
     // if we have not returned yet add/replace the entry
-    entry_index->hash = hash;
-    entry_index->eval = eval;
+    if (entry_index->hash == hash && entry_index->depth > depth && entry_index->age >= age) {
+        return;
+    }
+
     entry_index->depth = depth;
-    entry_index->age = age; 
-    entry_index->player = player;
-    entry_index->best_move = best_move;
-    entry_index->refutation_move = refutation_move;
+    entry_index->eval = eval;
     entry_index->node_type = node_type;
+    entry_index->best_move = best_move;
+    entry_index->player = player;
+    entry_index->age = age; 
+    entry_index->hash = hash;
 }
 
 // check if there is a hash entry for the given hash
@@ -119,25 +115,22 @@ int check_for_entry(struct hash_table_entry* entry_index, unsigned long long int
     return entry_index->hash != 0llu;
 }
 
-
 // returns the entry for the given hash
 struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth){
-    for (int i = 0; i < 4; i++) {
-        struct hash_table_entry* entry_index = table->table + ((hash + i) % table->size);
+    struct hash_table_entry* entry_index = table->table + ((hash % table->size) * NUMBER_OF_BUCKETS);
+    for (int i = 0; i < NUMBER_OF_BUCKETS; i++) {
 
         if (entry_index->hash == hash){
             // incriment the pv retrival count if relevent
             if (entry_index->node_type == PV_NODE){
                 table->pv_retrival_count++;
             }
-            else {
-                table->pv_retrival_count = 0;
-            }
 
             // return the entry
             table->hit_count++;
             return entry_index;
         }
+        entry_index++;
     }
     table->miss_count++;
     return NULL;
@@ -151,12 +144,18 @@ struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned lo
         return index;
     }
 
-    for (int i = 0; i < 4; i++) {
-        struct hash_table_entry* entry_index = table->table + ((hash + i) % table->size);
-        if (entry_index->depth > depth){
-            index = entry_index;
-            depth = entry_index->depth;
+    struct hash_table_entry* entry_index = table->table + ((hash % table->size) * NUMBER_OF_BUCKETS);
+    int min_depth = entry_index->depth;
+    for (int i = 0; i < NUMBER_OF_BUCKETS; i++) {
+        if (entry_index->age < age) {
+            return entry_index;
         }
+
+        if ((entry_index->depth < min_depth)){
+            index = entry_index;
+            min_depth = entry_index->depth;
+        }
+        entry_index++;
     }
 
 
@@ -166,13 +165,18 @@ struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned lo
 // checks if any of the spots for this hash value are empty
 // returns the index of the empty spot or a entry with the same hash if there is one, otherwise returns -1
 struct hash_table_entry* check_for_empty_spot(struct hash_table *table, unsigned long long int hash){
-    for (int i = 0; i < 4; i++) {
-        struct hash_table_entry* entry_index = table->table + ((hash + i) % table->size);
-        if (entry_index->hash == 0llu || entry_index->hash == hash){
+    struct hash_table_entry* entry_index = table->table + ((hash % table->size) * NUMBER_OF_BUCKETS);
+    struct hash_table_entry* empty_spot = NULL;
+    for (int i = 0; i < NUMBER_OF_BUCKETS; i++) {
+        if (entry_index->hash == hash){
             return entry_index;
         }
+        else if (entry_index->hash == 0llu){
+            empty_spot = entry_index;
+        }
+        entry_index++;
     }
-    return NULL;
+    return empty_spot;
 }
 
 // compute the hash of a board
