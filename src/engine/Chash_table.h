@@ -5,8 +5,8 @@
 #include <stdlib.h>
 
 #define PV_NODE 1
-#define FAIL_HIGH 2
-#define FAIL_LOW 3
+#define LOWER_BOUND 2
+#define UPPER_BOUND 3
 #define HORIZON_NODE 4
 #define UNKNOWN_NODE 5
 #define NULL_MOVE 4
@@ -95,18 +95,18 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, float
         table->num_entries++;
     }
 
-    // if we have not returned yet add/replace the entry
-    if (entry_index->hash == hash && entry_index->depth > depth && entry_index->age >= age) {
+    if (entry_index->hash == hash && entry_index->depth > depth) {
         return;
     }
-
+    
     entry_index->depth = depth;
-    entry_index->eval = eval;
     entry_index->node_type = node_type;
     entry_index->best_move = best_move;
     entry_index->player = player;
     entry_index->age = age; 
     entry_index->hash = hash;
+    entry_index->eval = eval;
+
 }
 
 // check if there is a hash entry for the given hash
@@ -151,7 +151,7 @@ struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned lo
             return entry_index;
         }
 
-        if ((entry_index->depth < min_depth)){
+        if ((entry_index->depth < min_depth) && (entry_index->node_type != PV_NODE)){
             index = entry_index;
             min_depth = entry_index->depth;
         }

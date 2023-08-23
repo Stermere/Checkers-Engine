@@ -18,10 +18,6 @@
 #define Null 0
 #define min(a,b) (((a)<(b))?(a):(b))
 #define max(a,b) (((a)>(b))?(a):(b))
-#define SEARCH_TYPE_NULL 1
-#define SEARCH_TYPE_NORMAL 0
-#define SEARCH_TYPE_PV 2
-#define SEARCH_TYPE_EXACT 3
 #define PRINT_OUTPUT 1
 
 
@@ -45,7 +41,7 @@ int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pla
 int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, int* save_loc, int* offsets, int only_jump);
 float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     struct set* piece_loc, int* offsets, int depth, float alpha, float beta, int captures_only, struct board_data* best_moves,
-    struct board_evaler* evaler, unsigned long long int hash, int depth_abs, int search_type, int node_num);
+    struct board_evaler* evaler, unsigned long long int hash, int depth_abs, int node_num);
 struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth);
 void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k);
 long long n_ply_search(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player, struct set* piece_loc, int* offsets, int depth);
@@ -72,7 +68,6 @@ struct board_data {
     char move_start;
     char move_end;
     int num_moves;
-    int prunned_loc;
     struct board_data *next_boards;
 };
 
@@ -80,6 +75,7 @@ struct board_data {
 struct search_info {
     struct board_data* head;
     struct board_evaler* evaler;
+    float eval;
 };
 
 // constructor for the board_data struct. sets the start/end move, and player variables as these are not going to change.
@@ -137,7 +133,7 @@ static PyObject* search_position(PyObject *self, PyObject *args){
 
     
     // get some stats about the search
-    py_tuple = Py_BuildValue("KKKKf", board_info->evaler->search_depth, board_info->evaler->extended_depth, board_info->evaler->nodes, board_info->evaler->hash_table->num_entries, best_move->eval);
+    py_tuple = Py_BuildValue("KKKKf", board_info->evaler->search_depth, board_info->evaler->extended_depth, board_info->evaler->nodes, board_info->evaler->hash_table->num_entries, board_info->eval);
     PyList_Append(py_list, py_tuple);
 
     // free the search tree the evaler and the transposition table
@@ -278,8 +274,11 @@ void undo_piece_locations_update(int piece_loc_initial, int piece_loc_after, str
 // after sorting or at anytime before continuing to search the tree, move the moves in the transposition table
 // to the start of the move list
 void order_moves(struct board_data* ptr, struct hash_table_entry* entry, struct killer_entry* killer_entry){
-    short best_move = entry->best_move;
-    short refutation_move = entry->refutation_move;
+    short best_move = 0;
+    if (entry != NULL){
+        best_move = entry->best_move;
+    }
+
     int sorted_index = 0;
     // move the transposition table moves to the start of the move list
     if (best_move != 0){
@@ -296,23 +295,9 @@ void order_moves(struct board_data* ptr, struct hash_table_entry* entry, struct 
             }
         }
     }
-    if (refutation_move != 0 && refutation_move != best_move){
-        char start = refutation_move >> 8;
-        char end = refutation_move & 0xFF;
-        // move the refutation move to the start of the move list
-        for (int i = sorted_index; i < ptr->num_moves; i++){
-            if (ptr->next_boards[i].move_start == start && ptr->next_boards[i].move_end == end){
-                struct board_data temp = ptr->next_boards[i];
-                ptr->next_boards[i] = ptr->next_boards[sorted_index]; // moving the other move to the other location could be a performance hit
-                ptr->next_boards[sorted_index] = temp;
-                sorted_index++;
-                break;     
-            }
-        }
-    }
 
     // move the killer moves
-    if (killer_entry->move1 != refutation_move && killer_entry->move1 != best_move && killer_entry->move1 != 0){
+    if (killer_entry->move1 != best_move && killer_entry->move1 != 0){
         char start = killer_entry->move1 >> 8;
         char end = killer_entry->move1 & 0xFF;
         // move the killer move to the start of the move list
@@ -326,7 +311,7 @@ void order_moves(struct board_data* ptr, struct hash_table_entry* entry, struct 
             }
         }
     }
-    if (killer_entry->move2 != refutation_move && killer_entry->move2 != best_move && killer_entry->move2 != 0){
+    if (killer_entry->move2 != best_move && killer_entry->move2 != 0){
         char start = killer_entry->move2 >> 8;
         char end = killer_entry->move2 & 0xFF;
         // move the killer move to the start of the move list
@@ -664,26 +649,8 @@ int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, in
     return num_moves;
 }
 
-// a function to get the search type of the next node
-int get_node_type(int search_type, int node_num) {
-    int next_search_type = search_type;
-    if (node_num <= 0 && (search_type == SEARCH_TYPE_PV)) {
-        next_search_type = SEARCH_TYPE_EXACT;
-    } 
-
-    else if (node_num <= 0 && search_type == SEARCH_TYPE_EXACT) {
-        next_search_type = SEARCH_TYPE_PV;
-    }
-
-    else {
-        next_search_type = SEARCH_TYPE_NORMAL;
-    }
-
-    return next_search_type;
-}
-
 // a function that decides if a search should be extended or reduced at a certain node
-int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_type,
+int should_extend_or_reduce(int depth, int depth_abs, int node_num,
                             struct hash_table_entry* table_entry,
                             struct board_evaler* evaler, int jumped){
     // if the depth is to great reduce it to less than 0
@@ -697,15 +664,14 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
         node_type = table_entry->node_type;
     }
 
-    // PV line extension
-    if (search_type == SEARCH_TYPE_PV || node_type == PV_NODE) {
-        return depth + 1;
-    }
+    //if (node_type == PV_NODE){
+    //    return depth + 1;
+    //}
 
     // late move reduction
-    if (depth_abs > 4 && node_num > 5){
-        depth--;
-    }
+    //if (depth_abs > 3 && node_num > 3){
+    //    depth--;
+    //}
 
     return depth;
 }
@@ -714,7 +680,7 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int search_t
 // the best_moves struct will be populated to the search depth at the end of this search
 float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     struct set* piece_loc, int* offsets, int depth, float alpha, float beta, int captures_only, struct board_data* move_tree,
-    struct board_evaler* evaler, unsigned long long int hash, int depth_abs, int search_type, int node_num){
+    struct board_evaler* evaler, unsigned long long int hash, int depth_abs, int node_num){
     // setup variables
     int player_next;
     float board_eval = 0.0;
@@ -742,34 +708,32 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     
     // check if this board has been searched to depth before and if so return the eval from the hash table
     // if the value is not a PV-node then use the info that can be used to prune the search
-    struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth_abs);
-    if (table_entry != NULL){
-        // if the entry is usable set max and min eval or just return the eval if it is a PV-node
-        // if it is not the entry will still be used for move ordering
-        if (table_entry->age == evaler->search_depth && table_entry->depth <= depth_abs){
-            if (table_entry->node_type == PV_NODE){
-                min_eval = table_entry->eval;
-                max_eval = table_entry->eval;
-            }
-            max_eval = table_entry->eval;
-            // in some cases this is good enough to cause a instant cutoff
-            if (max_eval >= beta){
-                move_tree->eval = max_eval;
-                // if the eval is a mating eval update it to reflect how far it traveled up the tree
-                max_eval = (max_eval > 500.0f) ? max_eval - 1 : max_eval;
-                max_eval = (max_eval < -500.0f) ? max_eval + 1 : max_eval;
-                return max_eval;
-            }
-            min_eval = table_entry->eval;
-            // in some cases this is good enough to cause a instant cutoff
-            if (min_eval <= alpha){
-                move_tree->eval = min_eval;
-                // if the eval is a mating eval update it to reflect how far it traveled up the tree
-                min_eval = (min_eval > 500.0f) ? min_eval - 1 : min_eval;
-                min_eval = (min_eval < -500.0f) ? min_eval + 1 : min_eval;
-                return min_eval;
-            }
-        }
+    struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth);
+    if (table_entry != NULL) {
+        // currently causing issues with the search
+        //if (table_entry->depth >= depth && table_entry->age == evaler->search_depth) {
+        //    if (table_entry->node_type == PV_NODE) {
+        //        return table_entry->eval = (table_entry->eval > 500.0f) ? table_entry->eval - 1 : ((table_entry->eval < -500.0f) ? table_entry->eval + 1 : table_entry->eval);
+        //    } 
+        //    
+        //    else if (table_entry->node_type == LOWER_BOUND) {
+        //        max_eval = table_entry->eval;
+        //        // Update beta using the hash entry's eval
+        //        alpha = max(alpha, table_entry->eval);
+        //        if (alpha >= beta) {
+        //            return table_entry->eval = (table_entry->eval > 500.0f) ? table_entry->eval - 1 : ((table_entry->eval < -500.0f) ? table_entry->eval + 1 : table_entry->eval);
+        //        }
+        //    } 
+        //    
+        //    else if (table_entry->node_type == UPPER_BOUND) {
+        //        min_eval = table_entry->eval;
+        //        // Update alpha using the hash entry's eval
+        //        beta = min(beta, table_entry->eval);
+        //        if (alpha >= beta) {
+        //            return table_entry->eval = (table_entry->eval > 500.0f) ? table_entry->eval - 1 : ((table_entry->eval < -500.0f) ? table_entry->eval + 1 : table_entry->eval);
+        //        }
+        //    }
+        //}
     }
 
     // check if the moves are being repeated in this line of moves and if so evaluate this as a draw and return
@@ -813,7 +777,7 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
 
     // before continuing from this block of code, check if the hash table has a value for this board
     // if it does then use that to order the moves
-    if (table_entry != NULL && num_moves > 0){
+    if (num_moves > 1){
         order_moves(move_tree, table_entry, evaler->killer_table->table + depth_abs);
     }
 
@@ -829,20 +793,16 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
             return board_eval;
         }
         // if there are no moves and captures only is true then we found the end of a catures only search evaluate the position and return
-        else{
-            board_eval = get_eval(*p1, *p2, *p1k, *p2k, piece_loc, evaler);
-            move_tree->eval = board_eval;
-            return board_eval;
-        }
+
+        board_eval = get_eval(*p1, *p2, *p1k, *p2k, piece_loc, evaler);
+        move_tree->eval = board_eval;
+        return board_eval;
     }
 
-    float alpha_orig = alpha;
-    float beta_orig = beta;
+    float eval;
 
     // the the next boards are ready to be searched so begin the search!
     short best_move = NO_MOVE;
-    short refutation_move = NO_MOVE;
-    temp_board = move_tree->next_boards;
     for (int i = 0; i < num_moves; i++){
         // get the board data for the next move
         temp_board = move_tree->next_boards + i;
@@ -866,14 +826,11 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         }
 
         // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions0
-        int depth_next = should_extend_or_reduce(depth, depth_abs, i, search_type, table_entry, evaler, (jumped_piece_type != -1)) - 1;
+        int depth_next = should_extend_or_reduce(depth, depth_abs, i, table_entry, evaler, (jumped_piece_type != -1)) - 1;
 
-        // define the next search type
-        int next_search_type = get_node_type(search_type, i);
-
-        temp_board->eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
+        eval = search_board(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth_next,
                             alpha, beta, captures_only, temp_board, evaler, next_hash,
-                            depth_abs + 1, next_search_type, i);
+                            depth_abs + 1, i);
 
         
         // undo the update to the board and piece locations
@@ -881,43 +838,39 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
         undo_board_update(p1, p2, p1k, p2k, temp_board->move_start, temp_board->move_end, jumped_piece_type, initial_piece_type);
 
         // if the eval is infinity the search is trying to end so return
-        if (temp_board->eval == INFINITY){
+        if (eval == INFINITY){
             return INFINITY;
         }
 
         // alpha beta prunning
         if (player == 1){
-            if (max_eval < temp_board->eval){
-                max_eval = temp_board->eval;
+            if (max_eval < eval){
                 best_move = (temp_board->move_start << 8) | temp_board->move_end; 
+                max_eval = eval;
             }
             // if the max eval is now greater than before then this is the refutation move
             if (max_eval > alpha){
-                refutation_move = (temp_board->move_start << 8) | temp_board->move_end;
                 alpha = max_eval;
                 evaler->alpha = alpha;
             }
             // prune if a cut off occurs
-            if (alpha > beta){
-                move_tree->prunned_loc = i + 1;
+            if (alpha >= beta){
                 update_killer_table(evaler->killer_table, depth_abs, temp_board->move_start, temp_board->move_end);
                 break;
             }
         }
         else{
-            if (min_eval > temp_board->eval){
-                min_eval = temp_board->eval;
+            if (min_eval > eval){
+                min_eval = eval;
                 best_move = (temp_board->move_start << 8) | temp_board->move_end;
             }
             // if the min eval is now less than before then this is the refutation move
             if (min_eval < beta){
-                refutation_move = (temp_board->move_start << 8) | temp_board->move_end;
                 beta = min_eval;
                 evaler->beta = beta;
             }
             // prune if a cut off occurs
-            if (alpha > beta){
-                move_tree->prunned_loc = i + 1;
+            if (alpha >= beta){
                 update_killer_table(evaler->killer_table, depth_abs, temp_board->move_start, temp_board->move_end);
                 break;
             }
@@ -938,18 +891,18 @@ float search_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int pla
     char node_type = UNKNOWN_NODE;
 
     // if alpha and beta have improved then this is a PV node
-    if (alpha_orig >= evaler->alpha && beta_orig <= evaler->beta){
+    if (alpha <= board_eval && board_eval <= beta){
         node_type = PV_NODE;
     }
     else if (board_eval <= alpha){
-        node_type = FAIL_LOW;
+        node_type = UPPER_BOUND;
     }
     else if (board_eval >= beta){
-        node_type = FAIL_HIGH;
+        node_type = LOWER_BOUND;
     }
 
     // store the eval in the hash table
-    add_hash_entry(evaler->hash_table, hash, board_eval, depth_abs, evaler->search_depth, player, best_move, refutation_move, node_type);
+    add_hash_entry(evaler->hash_table, hash, board_eval, depth, evaler->search_depth, player, best_move, node_type);
     
     // if the eval is a mating eval update it to reflect how far it traveled up the tree
     board_eval = (board_eval > 500.0f) ? board_eval - 1 : board_eval;
@@ -991,7 +944,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     double cpu_time_used;
     int depth;
     int extended_depth;
-    int terminate = -5; // allows continued search after mate is found
+    int terminate = -3; // allows continued search after mate is found
     start = clock();
     evaler->start_time = start;
     evaler->alpha = -INFINITY;
@@ -1008,7 +961,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
 
         // call the search function and recurse
         eval_ = search_board(&p1, &p2, &p1k, &p2k, player, piece_loc, piece_offsets, i, -1000, 1000, 0,
-                             move_tree, evaler, hash, 0, SEARCH_TYPE_EXACT, 0);
+                             move_tree, evaler, hash, 0, 0);
 
         // get the end time
         end = clock();
@@ -1036,7 +989,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
             terminate = 1;
         }
 
-        // only terminate once the eval has been a mate score for 5 plys
+        // only terminate once the eval has been a mate score for 3 plys
         else if (eval_ > 500.0 || eval_ < -500.0){
             terminate++;
         }
@@ -1081,7 +1034,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         printf("Search Results:\n");
         SetConsoleTextAttribute(hStdOut, FOREGROUND_GREEN);
         printf("HashTable Hit ratio: %d\n", (evaler->hash_table->hit_count * 100) / (evaler->hash_table->hit_count + evaler->hash_table->miss_count));
-        printf("HashTable Usage: %d\n", (evaler->hash_table->num_entries * 100llu) / evaler->hash_table->size);
+        printf("HashTable Usage: %d\n", (evaler->hash_table->num_entries * 100llu) / evaler->hash_table->total_size);
         printf("Nodes: %lld\n", evaler->nodes);
         printf("Time: %fs\n", cpu_time_used);
         SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
@@ -1105,6 +1058,8 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
 
     return_struct->head = move_tree_clone;
     return_struct->evaler = evaler;
+    return_struct->eval = move_tree_clone->eval;
+    
     
     // return the best moves and evaler
     return return_struct;
@@ -1201,13 +1156,14 @@ void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k){
 void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, unsigned long long hash, struct board_evaler* evaler){
     // use the hash table to make the line of moves
     int depth = 0;
-    while (True) {
+    while (depth < evaler->search_depth) {
         struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth);
-        if (table_entry == NULL || table_entry->best_move == NO_MOVE){
+        if (table_entry == NULL || table_entry->best_move == NO_MOVE || table_entry->node_type != PV_NODE){
             break;
         }
-        
-        printf("%d %d\n", table_entry->best_move >> 8, table_entry->best_move & 0xFF);
+
+        printf("ply %d move %d %d\n", depth, table_entry->best_move >> 8, table_entry->best_move & 0xFF);
+        printf("eval %f\n\n", table_entry->eval);
 
         hash = update_hash(p1, p2, p1k, p2k, table_entry->best_move >> 8, table_entry->best_move & 0xFF, hash, evaler);
         update_board(&p1, &p2, &p1k, &p2k, table_entry->best_move >> 8, table_entry->best_move & 0xFF);
