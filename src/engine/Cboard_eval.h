@@ -18,6 +18,7 @@ float calculate_eval(long long p1, long long p2, long long p1k, long long p2k, s
 float get_closest_enemy_dist(long long p1, long long p2, long long p1k, long long p2k, int pos, int type, int* piece_loc_array, int num_pieces, struct board_evaler* evaler);
 float is_runaway_piece(long long p1, long long p2, long long p1k, long long p2k, int type, int pos);
 float evaluate_pos(int type, int pos, struct board_evaler* evaler);
+char* compute_offsets();
 
 
 // struct to hold the data for the hash table and other data related to getting a evaluation for a board
@@ -31,6 +32,7 @@ struct board_evaler{
     struct hash_table* hash_table;
     struct killer_table* killer_table;
     float* dist_arr;
+    char* piece_offsets;
     clock_t start_time;
     double time_limit;
 
@@ -55,6 +57,7 @@ struct board_evaler* board_evaler_constructor(int search_depth, double time_limi
     evaler->hash_table = init_hash_table(hash_table_size);
     evaler->killer_table = init_killer_table(search_depth);
     evaler->dist_arr = init_distance_table();
+    evaler->piece_offsets = compute_offsets();
     evaler->start_time = start_time;
     evaler->time_limit = time_limit;
     evaler->extended_depth = 0;
@@ -170,6 +173,8 @@ float evaluate_pos(int type, int pos, struct board_evaler* evaler){
     else if (type == 4){
         return evaler->king_pos_map[pos];
     }
+
+    return 0.0f;
 }
 
 // get the distance to the closest enemy piece
@@ -206,78 +211,6 @@ float is_trapped_king(long long p1, long long p2, long long p1k, long long p2k, 
     
 }
 
-// check if a piece is a runnaway piece (a piece that has a clear path to the other side of the board)
-float is_runaway_piece(long long p1, long long p2, long long p1k, long long p2k, int type, int pos) {
-    long long check;
-    int dir;
-    if (type == 3 || type == 4) {
-        return 0.0f;
-    }
-
-    if (type == 1) {
-        check = p2 | p2k;
-        dir = -1;
-    } else {
-        check = p1 | p1k;
-        dir = 1;
-    }
-
-    // make a bit make of every position that this piece could reach
-    long long mask = 0;
-    int i = pos;
-    int placed = 0;
-
-
-    i += dir * 7;
-    while (i >= 0 && i < 64 && (i % 8 != 0 && i % 8 != 7)) {
-        mask |= 1ll << i;
-        i += dir * 7;
-        placed = 1;
-    }
-    while (i >= 0 && i < 64 && placed == 1) {
-        mask |= 1ll << i;
-        i += dir * 8;
-    }
-
-    i = pos;
-    i += dir * 9;
-    placed = 0;
-    while (i >= 0 && i < 64 && (i % 8 != 7 && i % 8 != 0)) {
-        mask |= 1ll << i;
-        i += dir * 9;
-        placed = 1;
-    }
-    while (i >= 0 && i < 64 && placed == 1) {
-        mask |= 1ll << i;
-        i += dir * 8;
-    }
-
-    // fill in the middle
-    i = pos + dir;
-    long long masker = 0;
-    while (i >= 0 && i < 64) {
-        if ((mask & (1ll << i))) {
-            masker = !masker;
-            i += dir;
-            continue;
-        }
-
-        mask |= masker << i;
-        if (i % 8 == 0 || i % 8 == 7) {
-            masker = 0;
-        }
-        i += dir;
-
-    }
-     
-    // check if the mask has any enemy pieces in it
-    if ((mask & check) == 0) {
-        return 0.5f;
-    }
-
-    return 0.0f;
-    
-}
 
 // compute the array of piece positions containing how good it is to have a piece at each position
 float* compute_piece_pos_p1(){
@@ -342,6 +275,43 @@ float* compute_king_pos(){
 
 
     return eval_table;
+}
+
+// compute the valid move directions for every location on the board
+// saves the results the the pointer passed to the function in the form of 4 chars either 0 or 1
+// 1 means it is a valid direction to move in
+// the first char is the direction of the move to the left and up
+// the second char is the direction of the move to the right and up
+// the third char is the direction of the move to the left and down
+// the fourth char is the direction of the move to the right and down
+char* compute_offsets(){
+    char* offsets = malloc(sizeof(char) * 64 * 4);
+
+    // init the array to true
+    for (int i = 0; i < 64 * 4; i++){
+        offsets[i] = 1;
+    }
+    // for moves that are not possible set them to false in the array of moves
+    for (int i = 0; i < 64; i++){
+        if (i % 8 == 0){
+            offsets[i * 4 + 0] = 0;
+            offsets[i * 4 + 2] = 0;
+        }
+        if ((i + 1) % 8 == 0){
+            offsets[i * 4 + 1] = 0;
+            offsets[i * 4 + 3] = 0;
+        }
+        if (i > 55){
+            offsets[i * 4 + 2] = 0;
+            offsets[i * 4 + 3] = 0;   
+        }
+        if (i < 8){
+            offsets[i * 4 + 0] = 0;
+            offsets[i * 4 + 1] = 0; 
+        }
+    }
+
+    return offsets;
 }
 
 // compute the distance between two bit positions
