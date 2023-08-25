@@ -147,7 +147,7 @@ struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned lo
     struct hash_table_entry* entry_index = table->table + ((hash % table->size) * NUMBER_OF_BUCKETS);
     int min_depth = entry_index->depth;
     for (int i = 0; i < NUMBER_OF_BUCKETS; i++) {
-        if (entry_index->age < age) {
+        if ((entry_index->age + 2) < age) {
             return entry_index;
         }
 

@@ -1,4 +1,4 @@
-// killer table for storing refutation tables for each depth
+// Killer table for storing refutation tables for each depth
 // Author: Collin Kees
 
 #include <stdlib.h>
@@ -24,7 +24,7 @@ struct killer_table* init_killer_table(int max_depth){
 }
 
 // clear the killer table for expanding the search
-void get_depth_moves(struct killer_table *table, int depth){
+struct killer_entry get_depth_moves(struct killer_table *table, int depth){
     return table->table[depth];
 }
 
