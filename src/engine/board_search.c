@@ -32,12 +32,12 @@ struct set* get_piece_locations(intLong p1, intLong p2, intLong p1k, intLong p2k
 void update_piece_locations(int piece_loc_initial, int piece_loc_after, struct set* piece_loc);
 void undo_piece_locations_update(int piece_loc_initial, int piece_loc_after, struct set* piece_loc);
 void sort_moves(struct board_data* ptr, int player);
-int get_next_board_state(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, int player, int* offsets);
+int get_next_board_state(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, int player, char* offsets);
 int get_piece_at_location(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos);
 int update_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece_loc_initial, int piece_loc_after);
 void undo_board_update(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece_loc_initial, int piece_loc_after, int jumped_piece_type, int initial_piece_type);
-int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, int* moves, struct set* piece_loc, int* offsets, int jump);
-int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, int* save_loc, int* offsets, int only_jump);
+int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, int* moves, struct set* piece_loc, char* offsets, int jump);
+int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, int* save_loc, char* offsets, int only_jump);
 float negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     struct set* piece_loc, int depth, float alpha, float beta, int captures_only,
     struct board_evaler* evaler, unsigned long long int hash, int depth_abs, int node_num);
@@ -560,11 +560,6 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num,
         return depth + 1;
     }
 
-    // late move reduction
-    if (depth_abs > 3 && node_num > 3){
-        depth--;
-    }
-
     return depth;
 }
 
@@ -580,6 +575,10 @@ float negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     float alpha_orig = alpha;
     int initial_piece_type;
     unsigned long long int next_hash;
+
+    // update search stats
+    evaler->nodes++;
+    evaler->avg_depth += depth_abs;
 
     if (depth_abs > evaler->extended_depth && depth >= 0){
         evaler->extended_depth = depth_abs;
@@ -599,7 +598,7 @@ float negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     // check if this board has been searched to depth before and if so return the eval from the hash table
     // if the value is not a PV-node then use the info that can be used to prune the search
     struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth);
-    if (table_entry != NULL && table_entry->depth > depth) {
+    if (table_entry != NULL && table_entry->depth >= depth) {
         if (table_entry->node_type == PV_NODE) {
             return (table_entry->eval > 500.0f) ? table_entry->eval - 1 : ((table_entry->eval < -500.0f) ? table_entry->eval + 1 : table_entry->eval);
         } 
@@ -618,10 +617,6 @@ float negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     if (depth <= 0){
         captures_only = True;
     }
-
-    // update search stats
-    evaler->nodes++;
-    evaler->avg_depth += depth_abs;
 
     // get the moves for this board and player combo
     int moves[96];
@@ -659,8 +654,6 @@ float negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         initial_piece_type = get_piece_at_location(*p1, *p2, *p1k, *p2k, move_start);
         int jumped_piece_type = update_board(p1, p2, p1k, p2k, move_start, move_end);
         update_piece_locations(move_start, move_end, piece_loc);
-
-
         player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, move_start, move_end, player, evaler->piece_offsets);
 
         // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions0
@@ -732,26 +725,22 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     // handle for colored terminal output
     HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 
-    int moves[96];
-    struct set* piece_loc = get_piece_locations(p1, p2, p1k, p2k);
 
     // the tree will be stored in a linked list of best_move structs (populated during search)
-    clock_t start_time = clock();
-    struct board_evaler* evaler = board_evaler_constructor(search_depth, search_time, start_time); 
+    struct set* piece_loc = get_piece_locations(p1, p2, p1k, p2k);
+    int moves[96];
 
-    // get the starting hash
-    intLong hash = get_hash(p1, p2, p1k, p2k, evaler->hash_table);
-    float eval_;
-
-    // state of the search
     clock_t start, end;
+    start = clock();
+    struct board_evaler* evaler = board_evaler_constructor(search_depth, search_time, start); 
+
+    intLong hash = get_hash(p1, p2, p1k, p2k, evaler->hash_table);
     double cpu_time_used;
     int depth;
     int extended_depth;
     int terminate = -3; // allows continued search after mate is found
-    start = clock();
-    evaler->start_time = start;
-
+    float eval_;
+    
     // call the search function
     for (int i = 1; i <= search_depth; i++){
         if (terminate == 1){
@@ -814,7 +803,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         SetConsoleTextAttribute(hStdOut, FOREGROUND_GREEN);
         printf("HashTable Hit ratio: %lld\n", (evaler->hash_table->hit_count * 100) / (evaler->hash_table->hit_count + evaler->hash_table->miss_count));
         printf("HashTable Usage: %lld\n", (evaler->hash_table->num_entries * 100llu) / evaler->hash_table->total_size);
-        printf("Nodes/s: %lld\n", evaler->nodes / cpu_time_used);
+        printf("Nodes/s: %fM\n", ((double)evaler->nodes / cpu_time_used) / 1000000.0);
         printf("Time: %fs\n", cpu_time_used);
         SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
         printf("Depth: %d\n", evaler->extended_depth);
@@ -827,7 +816,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     }
 
     // print the line of best moves to the terminal (deguggigng)
-    //print_line(p1, p2, p1k, p2k, hash, evaler);
+    print_line(p1, p2, p1k, p2k, hash, evaler);
 
     free(piece_loc);
 
@@ -928,7 +917,7 @@ void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, unsigned long 
     int depth = 0;
     while (depth < evaler->search_depth) {
         struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth);
-        if (table_entry == NULL || table_entry->best_move == NO_MOVE){
+        if (table_entry == NULL || table_entry->best_move == NO_MOVE || table_entry->node_type != PV_NODE){
             break;
         }
 
