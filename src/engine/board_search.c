@@ -16,6 +16,7 @@
 #define True 1
 #define False 0
 #define Null 0
+#define INFINITY 1000000000
 #define min(a,b) (((a)<(b))?(a):(b))
 #define max(a,b) (((a)>(b))?(a):(b))
 #define PRINT_OUTPUT 1
@@ -84,7 +85,7 @@ static PyObject* search_position(PyObject *self, PyObject *args){
 
     
     // get some stats about the search
-    py_tuple = Py_BuildValue("KKKKf", search_info->evaler->search_depth, search_info->evaler->extended_depth,
+    py_tuple = Py_BuildValue("KKKKi", search_info->evaler->search_depth, search_info->evaler->extended_depth,
                         search_info->evaler->nodes, search_info->evaler->hash_table->num_entries,
                         search_info->entry->eval);
     PyList_Append(py_list, py_tuple);
@@ -565,12 +566,12 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num,
 
 // search the board for the best move recursivly and return the best eval that can be achived from that board position
 // the best_moves struct will be populated to the search depth at the end of this search
-float negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
-    struct set* piece_loc, int depth, float alpha, float beta, int captures_only,
+int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
+    struct set* piece_loc, int depth, int alpha, int beta, int captures_only,
     struct board_evaler* evaler, unsigned long long int hash, int depth_abs, int node_num){
     // setup variables
     int player_next;
-    float board_eval = -INFINITY;
+    int board_eval = -2000;
     int num_moves;
     float alpha_orig = alpha;
     int initial_piece_type;
@@ -633,7 +634,7 @@ float negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     if (num_moves == 0){
         // if there are no moves and captures only is false then a win has occured eval who won and return
         if (!captures_only){
-            return -1000.0f;
+            return -1000;
         }
         // if there are no moves and captures only is true then we found the end of a catures only search evaluate the position and return
         return get_eval(*p1, *p2, *p1k, *p2k, player, piece_loc, evaler);
@@ -641,7 +642,7 @@ float negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
 
     // the the next boards are ready to be searched so begin the search!
     short best_move = NO_MOVE;
-    float eval;
+    int eval;
     for (int i = 0; i < num_moves; i++){
         // prepare moves
         int move_start = moves[i * 2];
@@ -660,9 +661,9 @@ float negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         int depth_next = should_extend_or_reduce(depth, depth_abs, i, table_entry, evaler, (jumped_piece_type != -1)) - 1;
 
         // only flip the eval if the player changed
-        float flip = (player != player_next) ? -1.0f : 1.0f;
-        float next_alpha = (flip == 1.0f) ? alpha : -beta;
-        float next_beta = (flip == 1.0f) ? beta : -alpha;  
+        int flip = (player != player_next) ? -1 : 1;
+        int next_alpha = (flip == 1) ? alpha : -beta;
+        int next_beta = (flip == 1) ? beta : -alpha;  
         eval = negmax(p1, p2, p1k, p2k, player_next, piece_loc, depth_next,
                     next_alpha, next_beta, captures_only, evaler, next_hash,
                     depth_abs + 1, i) * flip;
@@ -707,7 +708,7 @@ float negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     add_hash_entry(evaler->hash_table, hash, board_eval, depth, evaler->search_depth, player, best_move, node_type);
     
     // if the eval is a mating eval update it to reflect how far it traveled up the tree
-    board_eval = (board_eval > 500.0f) ? board_eval - 1 : (board_eval < -500.0f) ? board_eval + 1 : board_eval;
+    board_eval = (board_eval > 500) ? board_eval - 1 : (board_eval < -500) ? board_eval + 1 : board_eval;
     
     return board_eval;
 }
@@ -739,7 +740,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     int depth;
     int extended_depth;
     int terminate = -3; // allows continued search after mate is found
-    float eval_;
+    int eval_;
     
     // call the search function
     for (int i = 1; i <= search_depth; i++){
@@ -773,7 +774,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
 
         if (PRINT_OUTPUT){
-            printf("\rPLY: %d\t PLYEX: %d\t Eval: %f", depth, evaler->extended_depth, round_float(eval_));
+            printf("\rPLY: %d\t PLYEX: %d\t Eval: %d   ", depth, evaler->extended_depth, eval_);
         }
 
         if (cpu_time_used > search_time){
@@ -781,7 +782,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
 
         // only terminate once the eval has been a mate score for 3 plys
-        else if (eval_ > 500.0 || eval_ < -500.0){
+        else if (eval_ > 500 || eval_ < -500){
             terminate++;
         }
 
@@ -803,13 +804,13 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         SetConsoleTextAttribute(hStdOut, FOREGROUND_GREEN);
         printf("HashTable Hit ratio: %lld\n", (evaler->hash_table->hit_count * 100) / (evaler->hash_table->hit_count + evaler->hash_table->miss_count));
         printf("HashTable Usage: %lld\n", (evaler->hash_table->num_entries * 100llu) / evaler->hash_table->total_size);
-        printf("Nodes/s: %fM\n", ((double)evaler->nodes / cpu_time_used) / 1000000.0);
+        printf("Nodes/s: %fM\n", round_float(((double)evaler->nodes / (cpu_time_used + 0.01)) / 1000000.0));
         printf("Time: %fs\n", cpu_time_used);
         SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
         printf("Depth: %d\n", evaler->extended_depth);
         printf("Avg depth: %lld\n", evaler->avg_depth / evaler->nodes);
 
-        printf("Eval: %f\n\n", round_float(table_entry->eval));
+        printf("Eval: %d\n\n", table_entry->eval);
 
         // set the text color to white
         SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
@@ -922,7 +923,7 @@ void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, unsigned long 
         }
 
         printf("ply %d move %d %d\n", depth, table_entry->best_move >> 8, table_entry->best_move & 0xFF);
-        printf("eval %f\n\n", table_entry->eval);
+        printf("eval %d\n\n", table_entry->eval);
 
         hash = update_hash(p1, p2, p1k, p2k, table_entry->best_move >> 8, table_entry->best_move & 0xFF, hash, evaler);
         update_board(&p1, &p2, &p1k, &p2k, table_entry->best_move >> 8, table_entry->best_move & 0xFF);

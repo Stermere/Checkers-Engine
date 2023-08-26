@@ -32,7 +32,7 @@ unsigned long long mt_rand(struct mt_state *state);
 // ie. the hash, its evaluation, what is the type of fail (fail high or fail low, or true value), the best move, etc.
 struct hash_table_entry {
     unsigned long long int hash;
-    float eval;
+    int eval;
     int depth; 
     int age;
     int player;
@@ -80,7 +80,7 @@ struct hash_table* init_hash_table(int size){
 }
 
 // adds a new entry to the hash table (depth is the depth remaining at the node)
-void add_hash_entry(struct hash_table *table, unsigned long long int hash, float eval, int depth, int age, int player,
+void add_hash_entry(struct hash_table *table, unsigned long long int hash, int eval, int depth, int age, int player,
                     short best_move, char node_type){
 
     // get the entry and incriment the number of entries
