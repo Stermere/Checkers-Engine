@@ -56,7 +56,7 @@ void print_set(struct set *s){
 int populate_set_array(struct set *s){
     s->size = get_bits_set(s->values);
     int index = 0;
-    for (int i = 0; i < 64; i++){
+    for (int i = 0; i < 64 && index < s->size; i++){
         if (s->values & (1ll << i)){
             s->array[index] = i;
             index++;
