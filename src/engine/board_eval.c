@@ -2,10 +2,10 @@
 // board evaluation and hashing functions
 
 #include <stdlib.h>
-#include "Cset.h"
-#include "Chash_table.h"
-#include "Cneural_net.h"
-#include "Ckiller_table.h"
+#include "set.c"
+#include "hash_table.c"
+#include "neural_net.c"
+#include "killer_table.c"
 
 
 // define some functions

@@ -9,7 +9,7 @@
 #include <math.h>
 #include <windows.h>
 // including the Cboard_eval library also includes the set and transposition tables for the engine
-#include "Cboard_eval.h"
+#include "board_eval.c"
 
 // define some constants
 #define intLong long long int
@@ -756,7 +756,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         evaler->max_depth = min(max(i + 10, 5), search_depth);
 
         // call the search function and recurse
-        eval_ = negmax(&p1, &p2, &p1k, &p2k, player, piece_loc, i, -1000 1000, 0,
+        eval_ = negmax(&p1, &p2, &p1k, &p2k, player, piece_loc, i, -1000, 1000, 0,
                        evaler, hash, 0, 0);
 
         // get the end time

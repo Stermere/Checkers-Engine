@@ -3,7 +3,7 @@
 // neural network for evaluating checkers moves
 // file contains the functions for training and using the neural network
 
-#include "Cnet_io.h"
+#include "net_io.c"
 #include <math.h>
 
 
