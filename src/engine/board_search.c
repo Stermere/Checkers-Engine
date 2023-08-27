@@ -131,12 +131,13 @@ PyInit_search_engine(void){
 // note: assumes a valid board
 struct set* get_piece_locations(intLong p1, intLong p2, intLong p1k, intLong p2k){
     struct set* piece_loc = create_set();
-    piece_loc->value = -1;
     for (int i = 0; i < 64; i++){
         if (get_piece_at_location(p1, p2, p1k, p2k, i) != 0){
             set_add(piece_loc, i);
         }
     }
+    populate_set_array(piece_loc);
+
     return piece_loc;
 }
 
@@ -449,20 +450,19 @@ int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pla
     } else {
         friendly_pieces = 4;
     }
-    int piece_loc_array[64];
-    int num_pieces = populate_array(piece_loc, piece_loc_array);
+    int num_pieces = populate_set_array(piece_loc);
 
     // loop over all the locations with a piece and generate the moves for each one
     for (int i = 0; i < num_pieces; i++){
         // check if it is a valid piece
-        type = get_piece_at_location(p1, p2, p1k, p2k, piece_loc_array[i]);
+        type = get_piece_at_location(p1, p2, p1k, p2k, piece_loc->array[i]);
         if (type == player || type == friendly_pieces){
             // generate the moves for the piece
-            move_from_pos = generate_moves(p1, p2, p1k, p2k, piece_loc_array[i], moves + (num_moves * 2), offsets, jump);
+            move_from_pos = generate_moves(p1, p2, p1k, p2k, piece_loc->array[i], moves + (num_moves * 2), offsets, jump);
             if (move_from_pos == -1){
                 num_moves = 0;
                 jump = 1;
-                move_from_pos = generate_moves(p1, p2, p1k, p2k, piece_loc_array[i], moves + (num_moves * 2), offsets, jump);
+                move_from_pos = generate_moves(p1, p2, p1k, p2k, piece_loc->array[i], moves + (num_moves * 2), offsets, jump);
                 num_moves += move_from_pos;
             }
             // if no special cases occured add the moves to the counter

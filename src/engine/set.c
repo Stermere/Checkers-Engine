@@ -1,220 +1,69 @@
 // Author: Collin Kees
 
 // a basic implimentation of a set to hold the location of pieces on a checkers board
-// due to the nature of this task this is a specialized set that only holds ints and is 
-// not meant to be used for anything else, as it does not check for a element before inserting it
+// due to the nature of this task this it only holds numbers between 0 and 63 inclusive
+// this is because the board is 8x8 and the numbers are stored in a 64 bit integer
+// uses a bit set to store the values
 
-// the set is implemented as an avl tree with a sentinel node at the root
 #include <stdlib.h>
 
 struct set {
-    int value;
-    struct set *right;
-    struct set *left;
-    struct set *parent;
+    long long values;
+    int array[64];
+    int size;
 };
 
-// remove a value from the set
 void set_remove(struct set *s, int x){
-    // if the node is the entrypoint node then we need to get the next node (pointer is in the left child parameter)
-    if (s->value == -1){
-        // note: it is very important that the right child is used as the set add and remove can break if it is not (yes I could fix this but this is a faster fix and it works)
-        set_remove(s->right, x);
-    }
-    // if the value at the node is the search value go through and see what condition it meets
-    else if (s->value == x){
-        // if the node has no children then just remove it
-        if (s->right == NULL && s->left == NULL){
-            if (s->parent->value > x){
-                s->parent->left = NULL;
-                free(s);
-            } 
-            else if (s->parent->value < x){
-                s->parent->right = NULL;
-                free(s);
-            }
-            else {
-                printf("error: multiple entries with the same value exiting...");
-                exit(1);
-            }
-        }
-
-        // if one node is NULL just move its one child in to its place
-        else if (s->right == NULL){
-            if (s->parent->value > x){
-                s->parent->left = s->left;
-                s->left->parent = s->parent;
-                free(s);
-            } 
-            else if (s->parent->value < x){
-                s->parent->right = s->left;
-                s->left->parent = s->parent;
-                free(s);
-            }
-            else {
-                printf("error: multiple entries with the same value exiting...");
-                exit(1);
-            }
-        }
-        // same thing just for the other child node
-        else if (s->left == NULL){
-            if (s->parent->value > x){
-                s->parent->left = s->right;
-                s->right->parent = s->parent;
-                free(s);
-            } 
-            else if (s->parent->value < x){
-                s->parent->right = s->right;
-                s->right->parent = s->parent;
-                free(s);
-            }
-            else {
-                printf("error: multiple entries with the same value exiting...");
-                exit(1);
-            }
-        }
-        // if both children are not NULL then we need to find the proper way to update the pointers
-        else {
-            // geta temp struct for the node as removing a node and moving its children around
-            struct set *insertion_point;
-            // update the pointers
-            if (s->parent->value > x){
-                s->parent->left = s->left;
-                s->left->parent = s->parent;
-                insertion_point = s->left;
-                while (insertion_point->right != NULL){
-                    insertion_point = insertion_point->right;
-                }
-                insertion_point->right = s->right;
-                s->right->parent = insertion_point;
-                free(s);
-            } 
-            else if (s->parent->value < x){
-                s->parent->right = s->right;
-                s->right->parent = s->parent;
-                insertion_point = s->right;
-                while (insertion_point->left != NULL){
-                    insertion_point = insertion_point->left;
-                }
-                insertion_point->left = s->left;
-                s->left->parent = insertion_point;
-                free(s);
-            }
-            else{
-                printf("error: multiple entries with the same value exiting...");
-                exit(1);
-            }
-        } 
-    }
-    else if (s->value > x){
-        set_remove(s->left, x);
-    }
-    else if (s->value < x){
-        set_remove(s->right, x);
-    }
+    // update the bit set
+    s->values &= ~(1ll << x);
 }
 
-// add a value to the set
-// takes the sentinel node and the value to add as arguments
 void set_add(struct set *s, int x){
-    // if the node is the entrypoint node then we need to get the next node (pointer is in the left child parameter)
-    if (s->value == -1){
-        if (s->right == NULL){
-            s->right = malloc(sizeof(struct set));
-            s->right->value = x;
-            s->right->right = NULL;
-            s->right->left = NULL;
-            s->right->parent = s;
-            return;
-        }
-        set_add(s->right, x);
-    }
-
-    if (s->value > x){
-        if (s->left == NULL){
-            s->left = malloc(sizeof(struct set));
-            s->left->value = x;
-            s->left->left = NULL;
-            s->left->right = NULL;
-            s->left->parent = s;
-            return;
-        }
-        set_add(s->left, x);
-    }
-
-    if (s->value < x){
-        if (s->right == NULL){
-            s->right = malloc(sizeof(struct set));
-            s->right->value = x;
-            s->right->left = NULL;
-            s->right->right = NULL;
-            s->right->parent = s;
-            return;
-        }
-        set_add(s->right, x);
-    }
-}
-
-// rebalances the tree after a value is added or removed
-// takes the sentinel node as an argument
-// this function is not meant to be called directly, it is called by the set_add and set_remove functions
-void rebalance_tree(){
-    
+    // update the bit set
+    s->values |= (1ll << x); 
 }
 
 // create a set
 struct set* create_set(){
     // create a sentinel node
     struct set *s = malloc(sizeof(struct set));
-    s->value = -1;
-    s->right = NULL;
-    s->left = NULL;
+    s->values = 0;
+    s->size = 0;
     return s;
+}
+
+// returns the number of bits in the given long
+// uses a bit hack to do this in constant time
+int get_bits_set(long long i) {
+    i = i - ((i >> 1) & 0x5555555555555555);
+    i = (i & 0x3333333333333333) + ((i >> 2) & 0x3333333333333333);
+    return (((i + (i >> 4)) & 0xF0F0F0F0F0F0F0F) * 0x101010101010101) >> 56;
 }
 
 // print the set
 void print_set(struct set *s){
-    if(s->value != -1){
-        printf("%d ", s->value);
+    printf("set: {");
+    for (int i = 0; i < s->size; i++){
+        printf("%d", s->array[i]);
+        if (i != s->size - 1){
+            printf(", ");
+        }
     }
-    if(s->right != NULL){
-        print_set(s->right);
-    }
-    if(s->left != NULL){
-        print_set(s->left);
-    }
+    printf("}\n");
 }
 
-int populate_array_recursive(struct set *s, int *array, int i, int depth){
-    // add the value to the array and increment the index
-    array[i] = s->value;
-    i++;
-    // check if the node has a right child
-    if (s->right != NULL){
-        // call the function recursively
-        i = populate_array_recursive(s->right, array, i, depth + 1);
+// populates/updates the array with the values in the set and returns the number of values in the set
+int populate_set_array(struct set *s){
+    s->size = get_bits_set(s->values);
+    int index = 0;
+    for (int i = 0; i < 64; i++){
+        if (s->values & (1ll << i)){
+            s->array[index] = i;
+            index++;
+        }
     }
-    // check if the node has a left child
-    if (s->left != NULL){
-        // call the function recursively
-        i = populate_array_recursive(s->left, array, i, depth + 1);
-    }
-    return i;
-}
 
-// populates the array with the values in the set and returns the number of values in the set
-// takes a pointer to memory to store the array in as an argument
-// and a set pointer that is the tree node we are at
-int populate_array(struct set *s, int *array){
-    // check if the array element given was the head
-    if (s->value != -1){
-        printf("error: array element was not of the proper type exiting...");
-        exit(1);
-    }
-    else{
-        // return the elements in the set
-        return populate_array_recursive(s->right, array, 0, 0);
-    }
+    return s->size;
 }
 
 

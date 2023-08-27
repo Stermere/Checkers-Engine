@@ -79,37 +79,36 @@ int get_eval(long long p1, long long p2, long long p1k, long long p2k, int playe
 // calculate the board evaluation
 int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, struct set* piece_loc, struct board_evaler* evaler){
     int eval = 0;
-    int piece_loc_array[64];
-    int num_pieces = populate_array(piece_loc, piece_loc_array);
+    int num_pieces = populate_set_array(piece_loc);
     int p1num = 0;
     int p1knum = 0;
     int p2num = 0;
     int p2knum = 0;
     for (int i = 0; i < num_pieces; i++){
-        if (p1 >> piece_loc_array[i] & 1){
+        if (p1 >> piece_loc->array[i] & 1){
             eval += 30;
-            eval += evaluate_pos(1, piece_loc_array[i], evaler);
+            eval += evaluate_pos(1, piece_loc->array[i], evaler);
             p1num++;
 
         }
-        else if (p2 >> piece_loc_array[i] & 1){
+        else if (p2 >> piece_loc->array[i] & 1){
             eval -= 30;
-            eval -= evaluate_pos(2, piece_loc_array[i], evaler);
+            eval -= evaluate_pos(2, piece_loc->array[i], evaler);
             p2num++;
             
         }
-        else if (p1k >> piece_loc_array[i] & 1){
+        else if (p1k >> piece_loc->array[i] & 1){
             eval += 50;
-            eval += evaluate_pos(3, piece_loc_array[i], evaler);
-            eval += get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc_array[i], 3, piece_loc_array, num_pieces, evaler);
+            eval += evaluate_pos(3, piece_loc->array[i], evaler);
+            eval += get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 3, piece_loc->array, num_pieces, evaler);
             p1num++;
             p1knum++;
 
         }
-        else if (p2k >> piece_loc_array[i] & 1){
+        else if (p2k >> piece_loc->array[i] & 1){
             eval -= 50;
-            eval -= evaluate_pos(4, piece_loc_array[i], evaler);
-            eval -= get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc_array[i], 4, piece_loc_array, num_pieces, evaler);
+            eval -= evaluate_pos(4, piece_loc->array[i], evaler);
+            eval -= get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 4, piece_loc->array, num_pieces, evaler);
             p2num++;
             p2knum++;
         }
