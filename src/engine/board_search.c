@@ -561,6 +561,10 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num,
         return depth + 1;
     }
 
+    if (node_type == UPPER_BOUND && depth_abs > 3 && node_num > 2){
+        return depth - 1;
+    }
+
     return depth;
 }
 
@@ -599,7 +603,7 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     // check if this board has been searched to depth before and if so return the eval from the hash table
     // if the value is not a PV-node then use the info that can be used to prune the search
     struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth);
-    if (table_entry != NULL && table_entry->depth >= depth) {
+    if (table_entry != NULL && table_entry->depth >= depth && table_entry->player == player) {
         if (table_entry->node_type == PV_NODE) {
             return (table_entry->eval > 500.0f) ? table_entry->eval - 1 : ((table_entry->eval < -500.0f) ? table_entry->eval + 1 : table_entry->eval);
         } 
@@ -752,7 +756,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         evaler->max_depth = min(max(i + 10, 5), search_depth);
 
         // call the search function and recurse
-        eval_ = negmax(&p1, &p2, &p1k, &p2k, player, piece_loc, i, -1000.0f, 1000.0f, 0,
+        eval_ = negmax(&p1, &p2, &p1k, &p2k, player, piece_loc, i, -1000 1000, 0,
                        evaler, hash, 0, 0);
 
         // get the end time
