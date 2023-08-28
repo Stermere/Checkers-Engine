@@ -542,6 +542,12 @@ int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, in
     return num_moves;
 }
 
+int adjust_mate_score(int eval) {
+    return (eval > 500) ?
+         eval - 1 : ((eval < -500) ?
+         eval + 1 : eval);
+}
+
 // a function that decides if a search should be extended or reduced at a certain node
 int should_extend_or_reduce(int depth, int depth_abs, int node_num,
                             struct hash_table_entry* table_entry,
@@ -561,7 +567,7 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num,
         return depth + 1;
     }
 
-    if (node_type == UPPER_BOUND && depth_abs > 3 && node_num > 2){
+    if (node_type == UPPER_BOUND && depth_abs > 3 && node_num > 5){
         return depth - 1;
     }
 
@@ -605,7 +611,7 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth);
     if (table_entry != NULL && table_entry->depth >= depth && table_entry->player == player) {
         if (table_entry->node_type == PV_NODE) {
-            return (table_entry->eval > 500.0f) ? table_entry->eval - 1 : ((table_entry->eval < -500.0f) ? table_entry->eval + 1 : table_entry->eval);
+            return adjust_mate_score(table_entry->eval);
         } 
         else if (table_entry->node_type == LOWER_BOUND) {
             alpha = max(alpha, table_entry->eval);
@@ -614,8 +620,8 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
             beta = min(beta, table_entry->eval);
         }
         if (alpha >= beta) {
-            return (table_entry->eval > 500.0f) ? table_entry->eval - 1 : ((table_entry->eval < -500.0f) ? table_entry->eval + 1 : table_entry->eval);
-        } 
+            return adjust_mate_score(table_entry->eval);
+        }
     }
 
     // if the depth is 0 then we are at the end of the standard search so begin the captures search
@@ -646,7 +652,7 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
 
     // the the next boards are ready to be searched so begin the search!
     short best_move = NO_MOVE;
-    int eval;
+    int eval, flip, next_alpha, next_beta;
     for (int i = 0; i < num_moves; i++){
         // prepare moves
         int move_start = moves[i * 2];
@@ -665,13 +671,13 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         int depth_next = should_extend_or_reduce(depth, depth_abs, i, table_entry, evaler, (jumped_piece_type != -1)) - 1;
 
         // only flip the eval if the player changed
-        int flip = (player != player_next) ? -1 : 1;
-        int next_alpha = (flip == 1) ? alpha : -beta;
-        int next_beta = (flip == 1) ? beta : -alpha;  
+        flip = (player != player_next) ? -1 : 1;
+        next_alpha = (flip == 1) ? alpha : -beta;
+        next_beta = (flip == 1) ? beta : -alpha;
         eval = negmax(p1, p2, p1k, p2k, player_next, piece_loc, depth_next,
                     next_alpha, next_beta, captures_only, evaler, next_hash,
                     depth_abs + 1, i) * flip;
-
+        
         // undo the update to the board and piece locations
         undo_piece_locations_update(move_start, move_end, piece_loc);
         undo_board_update(p1, p2, p1k, p2k, move_start, move_end, jumped_piece_type, initial_piece_type);
@@ -711,10 +717,7 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     // store the eval in the hash table
     add_hash_entry(evaler->hash_table, hash, board_eval, depth, evaler->search_depth, player, best_move, node_type);
     
-    // if the eval is a mating eval update it to reflect how far it traveled up the tree
-    board_eval = (board_eval > 500) ? board_eval - 1 : (board_eval < -500) ? board_eval + 1 : board_eval;
-    
-    return board_eval;
+    return adjust_mate_score(board_eval);
 }
 
 // a function to round the float to 2 decimal places
@@ -731,7 +734,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 
 
-    // the tree will be stored in a linked list of best_move structs (populated during search)
+    // set for the piece locations
     struct set* piece_loc = get_piece_locations(p1, p2, p1k, p2k);
     int moves[96];
 
@@ -756,7 +759,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         evaler->max_depth = min(max(i + 10, 5), search_depth);
 
         // call the search function and recurse
-        eval_ = negmax(&p1, &p2, &p1k, &p2k, player, piece_loc, i, -1000, 1000, 0,
+        eval_ = negmax(&p1, &p2, &p1k, &p2k, player, piece_loc, i, -2000, 2000, 0,
                        evaler, hash, 0, 0);
 
         // get the end time
@@ -919,6 +922,7 @@ void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k){
 // print the expected line to standard out in a human readable format (for debugging)
 void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, unsigned long long hash, struct board_evaler* evaler){
     // use the hash table to make the line of moves
+    printf("PV ");
     int depth = 0;
     while (depth < evaler->search_depth) {
         struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth);
@@ -926,13 +930,13 @@ void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, unsigned long 
             break;
         }
 
-        printf("ply %d move %d %d\n", depth, table_entry->best_move >> 8, table_entry->best_move & 0xFF);
-        printf("eval %d\n\n", table_entry->eval);
+        printf("- %d %d ", depth, table_entry->best_move >> 8, table_entry->best_move & 0xFF);
 
         hash = update_hash(p1, p2, p1k, p2k, table_entry->best_move >> 8, table_entry->best_move & 0xFF, hash, evaler);
         update_board(&p1, &p2, &p1k, &p2k, table_entry->best_move >> 8, table_entry->best_move & 0xFF);
         depth++;
     }
+    printf("\n");
     human_readble_board(p1, p2, p1k, p2k);
 }
 
@@ -970,7 +974,7 @@ int main(){
     clock_t start, end;
     double cpu_time_used;
 
-    for (int i = 1; i < depth; i++){
+    for (int i = 2; i < depth; i++){
         // get the start time
         start = clock();
 
