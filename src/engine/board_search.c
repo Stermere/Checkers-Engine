@@ -39,7 +39,7 @@ int update_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece
 void undo_board_update(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece_loc_initial, int piece_loc_after, int jumped_piece_type, int initial_piece_type);
 int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, int* moves, struct set* piece_loc, char* offsets, int jump);
 int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, int* save_loc, char* offsets, int only_jump);
-float negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
+int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     struct set* piece_loc, int depth, float alpha, float beta, int captures_only,
     struct board_evaler* evaler, unsigned long long int hash, int depth_abs, int node_num);
 struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth);
