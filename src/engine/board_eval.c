@@ -4,8 +4,9 @@
 #include <stdlib.h>
 #include "set.c"
 #include "hash_table.c"
-#include "neural_net.c"
 #include "killer_table.c"
+#include "draw_table.c"
+//#include "neural_net.c"
 
 
 // define some functions
@@ -30,6 +31,7 @@ struct board_evaler{
     int max_depth;
     struct neural_net *NN_evaler;
     struct hash_table* hash_table;
+    struct draw_table* draw_table;
     struct killer_table* killer_table;
     int* dist_arr;
     char* piece_offsets;
@@ -55,6 +57,7 @@ struct board_evaler* board_evaler_constructor(int search_depth, double time_limi
     //long long int hash_table_size = 1 << 15;
     long long int hash_table_size = 1 << 20;
     evaler->hash_table = init_hash_table(hash_table_size);
+    evaler->draw_table = create_draw_table();
     evaler->killer_table = init_killer_table(search_depth);
     evaler->dist_arr = init_distance_table();
     evaler->piece_offsets = compute_offsets();

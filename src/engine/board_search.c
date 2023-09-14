@@ -80,7 +80,7 @@ static PyObject* search_position(PyObject *self, PyObject *args){
     PyObject* py_tuple;
 
     // add the best move
-    py_tuple = Py_BuildValue("ii", search_info->entry->best_move >> 8, search_info->entry->best_move & 0xFF);
+    py_tuple = Py_BuildValue("ii", (search_info->entry->best_move >> 8) & 0xFF, search_info->entry->best_move & 0xFF);
     PyList_Append(py_list, py_tuple);
 
     
@@ -178,11 +178,7 @@ void undo_piece_locations_update(int piece_loc_initial, int piece_loc_after, str
 // after sorting or at anytime before continuing to search the tree, move the moves in the transposition table
 // to the start of the move list
 void order_moves(int* moves, int num_moves, struct hash_table_entry* entry, struct killer_entry* killer_entry){
-    short best_move = 0;
-    if (entry != NULL){
-        best_move = entry->best_move;
-    }
-
+    short best_move = (entry != NULL) ? entry->best_move : NO_MOVE;
     int sorted_index = 0;
     // move the transposition table moves to the start of the move list
     if (best_move != 0){
@@ -240,51 +236,24 @@ void order_moves(int* moves, int num_moves, struct hash_table_entry* entry, stru
     }
 }
 
-// takes a pointer to the board_data struct that we want to sort the moves for 
-// sorts the array according to the score of the move
-// the pointer to the array that is passed is still the pointer to the array of board_data structs
-// uses the merge sort algorithm
-//void sort_moves(int* ptr, int player){
-//    // sort moves
-//    quick_sort(ptr, 0, ptr->num_moves - 1);
-//}
-//
-//int partition(int* ptr, int low, int high) {
-//    struct board_data temp;
-//    // get the pivot and swap it to the top
-//    int mid = (high + low) / 2;
-//    float pivot = ptr[mid].eval;
-//    temp = ptr[high];
-//    ptr[high] = ptr[mid];
-//    ptr[mid] = temp;
-//
-//    // indicates the right position of the pivot
-//    int i = low - 1;
-//
-//    for (int j = low; j <= high - 1; j++) {
-//        if (ptr[j].eval < pivot) {
-//            i++;
-//            temp = ptr[j];
-//            ptr[j] = ptr[i];
-//            ptr[i] = temp;
-//        }
-//    }
-//    temp = ptr[i + 1];
-//    ptr[i + 1] = ptr[high];
-//    ptr[high] = temp;
-//
-//    return i + 1;
-//}
-//
-//// quick sort algorithm
-//void quick_sort(int* ptr, int low, int high) {
-//    // split the array in half
-//    if (low < high) {
-//        int par = partition(ptr, low, high);
-//        quick_sort(ptr, low, par - 1);
-//        quick_sort(ptr, par + 1, high);
-//    }
-//}
+// update the best moves with move. move is put in the front of the list 
+unsigned long long int update_best_moves(unsigned long long int moves, short move) {
+    if (moves & (0xffffllu) == move) {
+        return moves;
+    }
+    else if ((moves >> 16) & (0xffffllu) == move) {
+        return (moves & (0xffffffff00000000llu)) | ((moves & (0xffffllu)) << 16) | move;
+    }
+    else if ((moves >> 32) & (0xffffllu) == move) {
+        return (moves & (0xffff000000000000llu)) | ((moves & (0xffffffffllu)) << 16) | move;
+    }
+    else if ((moves >> 48) & (0xffffllu) == move) {
+        return ((moves & (0xffffffffffffllu)) << 16) | move;
+    }
+    else {
+        return (moves << 16) | move;
+    }
+}
 
 // find the state of the next board after a move
 // returns 1 if the moving player is player 2 returns 0 if the player is player 1
@@ -563,11 +532,11 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num,
         node_type = table_entry->node_type;
     }
 
-    if (node_type == PV_NODE){
+    if (node_type == PV_NODE && depth_abs < 8){
         return depth + 1;
     }
 
-    if ((node_type == UPPER_BOUND || node_type == LOWER_BOUND) && depth_abs > 3 && node_num > 5){
+    if ((node_type == UPPER_BOUND) && depth_abs > 3 && node_num > 5){
         return depth - 1;
     }
 
@@ -623,6 +592,11 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         }
     }
 
+    // check for a draw by repetition
+    if (get_draw_entry(evaler->draw_table, hash) == 2){
+        return 0;
+    }
+
     // if the depth is 0 then we are at the end of the standard search so begin the captures search
     if (depth <= 0){
         captures_only = True;
@@ -665,6 +639,7 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         int jumped_piece_type = update_board(p1, p2, p1k, p2k, move_start, move_end);
         update_piece_locations(move_start, move_end, piece_loc);
         player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, move_start, move_end, player, evaler->piece_offsets);
+        add_draw_entry(evaler->draw_table, next_hash);
 
         // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions0
         int depth_next = should_extend_or_reduce(depth, depth_abs, i, table_entry, evaler, (jumped_piece_type != -1)) - 1;
@@ -680,6 +655,7 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         // undo the update to the board and piece locations
         undo_piece_locations_update(move_start, move_end, piece_loc);
         undo_board_update(p1, p2, p1k, p2k, move_start, move_end, jumped_piece_type, initial_piece_type);
+        remove_draw_entry(evaler->draw_table, next_hash);
 
         // if the eval is infinity the search is trying to end so return
         if (eval == INFINITY || eval == -INFINITY){
@@ -689,10 +665,10 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         // alpha beta prunning
         if (board_eval < eval){
             board_eval = eval;
-            best_move = (move_start << 8) | move_end; 
         }
         if (board_eval > alpha){
             alpha = board_eval;
+            best_move = (move_start << 8) | move_end; 
         }
         // prune if a cut off occurs
         if (alpha >= beta){
@@ -745,7 +721,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     double cpu_time_used;
     int depth;
     int extended_depth;
-    int terminate = -3; // allows continued search after mate is found
+    int terminate = 0;
     int eval_;
     
     // call the search function
@@ -789,7 +765,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
 
         // only terminate once the eval has been a mate score for 3 plys
         else if (eval_ > 500 || eval_ < -500){
-            terminate++;
+            terminate = 1;
         }
 
         // if there is only one move left then terminate
@@ -843,6 +819,7 @@ void end_board_search(struct board_evaler* evaler){
     free(evaler->killer_table->table);
     free(evaler->killer_table);
     free(evaler->piece_offsets);
+    free_draw_table(evaler->draw_table);
     free(evaler);
 }
 
@@ -930,14 +907,14 @@ void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, unsigned long 
         }
 
         // convert from 64 bit board to 32 square representation
-        int start = (65 - (table_entry->best_move >> 8)) / 2;
+        int start = (65 - (table_entry->best_move >> 8 & 0xFF)) / 2;
         int end = (65 - (table_entry->best_move & 0xFF)) / 2;
 
 
         printf("- %d %d ", start, end);
 
-        hash = update_hash(p1, p2, p1k, p2k, table_entry->best_move >> 8, table_entry->best_move & 0xFF, hash, evaler);
-        update_board(&p1, &p2, &p1k, &p2k, table_entry->best_move >> 8, table_entry->best_move & 0xFF);
+        hash = update_hash(p1, p2, p1k, p2k, (table_entry->best_move >> 8) & 0xFF, table_entry->best_move & 0xFF, hash, evaler);
+        update_board(&p1, &p2, &p1k, &p2k, (table_entry->best_move >> 8) & 0xFF, table_entry->best_move & 0xFF);
         depth++;
     }
     printf("\n");
