@@ -1,9 +1,12 @@
 # a python file that pitts two bots against each other
 
-import search_engine as se
-import search_engine_old as seo
 import sys
 import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'build', 'lib.win-amd64-cpython-310')))
+
+import search_engine as se
+import search_engine_old as seo
+
 from copy import deepcopy
 from bitboard_converter import convert_bit_move, convert_to_bitboard
 from Board_opperations import Board, check_jump_required, update_board, check_win, check_tie
@@ -14,7 +17,7 @@ def main(args) -> None:
     player = 1
     board = Board()
     game_history = []
-    p_time = 3
+    p_time = 0.1
     ply = 50
 
     engine_new_wins = 0
