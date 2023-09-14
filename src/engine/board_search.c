@@ -929,7 +929,12 @@ void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, unsigned long 
             break;
         }
 
-        printf("- %d %d ", depth, table_entry->best_move >> 8, table_entry->best_move & 0xFF);
+        // convert from 64 bit board to 32 square representation
+        int start = (65 - (table_entry->best_move >> 8)) / 2;
+        int end = (65 - (table_entry->best_move & 0xFF)) / 2;
+
+
+        printf("- %d %d ", start, end);
 
         hash = update_hash(p1, p2, p1k, p2k, table_entry->best_move >> 8, table_entry->best_move & 0xFF, hash, evaler);
         update_board(&p1, &p2, &p1k, &p2k, table_entry->best_move >> 8, table_entry->best_move & 0xFF);
