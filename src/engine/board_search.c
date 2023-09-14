@@ -563,11 +563,11 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num,
         node_type = table_entry->node_type;
     }
 
-    if (node_type == PV_NODE && depth_abs < 8){
+    if (node_type == PV_NODE){
         return depth + 1;
     }
 
-    if (node_type == UPPER_BOUND && depth_abs > 3 && node_num > 5){
+    if ((node_type == UPPER_BOUND || node_type == LOWER_BOUND) && depth_abs > 3 && node_num > 5){
         return depth - 1;
     }
 
@@ -599,7 +599,6 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     if (evaler->nodes % 10000 == 0 && evaler->nodes != 0){
         clock_t current_time = clock();
         double cpu_time_used = ((double)(current_time - evaler->start_time)) / CLOCKS_PER_SEC;
-        // print time used and time limit
         if (cpu_time_used > evaler->time_limit){
             return INFINITY;
 

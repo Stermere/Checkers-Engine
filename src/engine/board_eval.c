@@ -18,6 +18,7 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
 int get_closest_enemy_dist(long long p1, long long p2, long long p1k, long long p2k, int pos, int type, int* piece_loc_array, int num_pieces, struct board_evaler* evaler);
 int evaluate_pos(int type, int pos, struct board_evaler* evaler);
 char* compute_offsets();
+int king_dist(int pos, int player, int num_pieces);
 
 
 // struct to hold the data for the hash table and other data related to getting a evaluation for a board
@@ -88,12 +89,14 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
         if (p1 >> piece_loc->array[i] & 1){
             eval += 30;
             eval += evaluate_pos(1, piece_loc->array[i], evaler);
+            eval += king_dist(piece_loc->array[i], 1, num_pieces);
             p1num++;
 
         }
         else if (p2 >> piece_loc->array[i] & 1){
             eval -= 30;
             eval -= evaluate_pos(2, piece_loc->array[i], evaler);
+            eval -= king_dist(piece_loc->array[i], 2, num_pieces);
             p2num++;
             
         }
@@ -195,10 +198,24 @@ int get_closest_enemy_dist(long long p1, long long p2, long long p1k, long long 
 
     return 14 - dist;
 }
+
+int king_dist(int pos, int player, int num_pieces) {
+    if (num_pieces > 12) {
+        return 0;
+    }
+
+    if (player == 1) {
+        return 8 - (pos / 8);
+    } else {
+        return pos / 8;
+    }
+}
+
+
      
 
-float is_trapped_king(long long p1, long long p2, long long p1k, long long p2k, int type, int pos) {
-    
+int is_trapped_king(long long p1, long long p2, long long p1k, long long p2k, int type, int pos) {
+
 }
 
 
