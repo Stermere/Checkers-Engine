@@ -125,6 +125,11 @@ PyInit_search_engine(void){
 
 // Start of main code search code
 
+// a function to round the float to 2 decimal places
+float round_float(float num){
+    return (float)((int)(num * 100 + 0.5)) / 100;
+}
+
 // get the location of all the piece's on the board to avoid looping over unused spots
 // takes the board as arguments
 // returns a set of all the pieces on the board
@@ -233,25 +238,6 @@ void order_moves(int* moves, int num_moves, struct hash_table_entry* entry, stru
                 break;    
             }
         }
-    }
-}
-
-// update the best moves with move. move is put in the front of the list 
-unsigned long long int update_best_moves(unsigned long long int moves, short move) {
-    if (moves & (0xffffllu) == move) {
-        return moves;
-    }
-    else if ((moves >> 16) & (0xffffllu) == move) {
-        return (moves & (0xffffffff00000000llu)) | ((moves & (0xffffllu)) << 16) | move;
-    }
-    else if ((moves >> 32) & (0xffffllu) == move) {
-        return (moves & (0xffff000000000000llu)) | ((moves & (0xffffffffllu)) << 16) | move;
-    }
-    else if ((moves >> 48) & (0xffffllu) == move) {
-        return ((moves & (0xffffffffffffllu)) << 16) | move;
-    }
-    else {
-        return (moves << 16) | move;
     }
 }
 
@@ -536,9 +522,9 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num,
         return depth + 1;
     }
 
-    if ((node_type == UPPER_BOUND) && depth_abs > 3 && node_num > 5){
-        return depth - 1;
-    }
+    //if (node_type == UPPER_BOUND){
+    //    return depth - 1;
+    //}
 
     return depth;
 }
@@ -665,10 +651,10 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         // alpha beta prunning
         if (board_eval < eval){
             board_eval = eval;
+            best_move = (move_start << 8) | move_end; 
         }
         if (board_eval > alpha){
             alpha = board_eval;
-            best_move = (move_start << 8) | move_end; 
         }
         // prune if a cut off occurs
         if (alpha >= beta){
@@ -695,10 +681,63 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     return adjust_mate_score(board_eval);
 }
 
-// a function to round the float to 2 decimal places
-float round_float(float num){
-    return (float)((int)(num * 100 + 0.5)) / 100;
+// marks pv nodes in the hash table
+void PV_labler(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
+    struct set* piece_loc, int depth, unsigned long long int hash, struct board_evaler* evaler) {
+
+    struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth);
+    if (table_entry == NULL || table_entry->best_move == NO_MOVE || depth <= 0) {
+        return;
+    }
+
+    table_entry->node_type = PV_NODE;
+
+    short move_start = (table_entry->best_move >> 8) & 0xFF;
+    short move_end = table_entry->best_move & 0xFF;
+
+    hash = update_hash(*p1, *p2, *p1k, *p2k, move_start, move_end, hash, evaler);
+    int initial_piece_type = get_piece_at_location(*p1, *p2, *p1k, *p2k, move_start);
+    int jumped_piece_type = update_board(p1, p2, p1k, p2k, move_start, move_end);
+    update_piece_locations(move_start, move_end, piece_loc);
+    int player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, move_start, move_end, player, evaler->piece_offsets);
+
+    PV_labler(p1, p2, p1k, p2k, player_next, piece_loc, depth - 1, hash, evaler);
+
+    undo_piece_locations_update(move_start, move_end, piece_loc);
+    undo_board_update(p1, p2, p1k, p2k, move_start, move_end, jumped_piece_type, initial_piece_type);
+
+
+    
 }
+
+int MTDF(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
+    struct set* piece_loc, int depth, int f, struct board_evaler* evaler,
+    unsigned long long int hash) {
+    
+    int g = f;
+    int upper_bound = INFINITY;
+    int lower_bound = -INFINITY;
+
+    while (lower_bound < upper_bound) {
+        int beta = (g == lower_bound) ? g + 1 : g;
+
+        g = negmax(p1, p2, p1k, p2k, player, piece_loc, depth, beta - 1, beta, 0,
+            evaler, hash, 0, 0);
+
+        if (g < beta) {
+            upper_bound = g;
+        } else {
+            lower_bound = g;
+        }
+    }
+
+    // follow the pv line labeling each node as a PV node
+    PV_labler(p1, p2, p1k, p2k, player, piece_loc, depth, hash, evaler);
+
+    return g;
+}
+
+
 
 // prepare needed memory for a search and call the search function to find the best move and return a pointer to the memory 
 // location that holds the moves for the board ordered in the order best to worst
@@ -722,7 +761,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     int depth;
     int extended_depth;
     int terminate = 0;
-    int eval_;
+    int eval_ = 0;
     
     // call the search function
     for (int i = 1; i <= search_depth; i++){
@@ -733,9 +772,8 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         evaler->search_depth = i;
         evaler->max_depth = min(max(i + 10, 5), search_depth);
 
-        // call the search function and recurse
-        eval_ = negmax(&p1, &p2, &p1k, &p2k, player, piece_loc, i, -2000, 2000, 0,
-                       evaler, hash, 0, 0);
+        // search with MTDF 
+        eval_ = MTDF(&p1, &p2, &p1k, &p2k, player, piece_loc, i, eval_, evaler, hash);
 
         // get the end time
         end = clock();
