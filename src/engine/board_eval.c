@@ -49,7 +49,6 @@ struct board_evaler* board_evaler_constructor(int search_depth, double time_limi
     struct board_evaler* evaler = (struct board_evaler*)malloc(sizeof(struct board_evaler));
     evaler->piece_pos_map_p1 = compute_piece_pos_p1();
     evaler->piece_pos_map_p2 = compute_piece_pos_p2();
-    evaler->king_pos_map = compute_king_pos();
     evaler->nodes = 0ll;
     evaler->avg_depth = 0ll;
     // load the neural network
@@ -163,12 +162,6 @@ int evaluate_pos(int type, int pos, struct board_evaler* evaler){
     else if (type == 2){
         return evaler->piece_pos_map_p2[pos];
     }
-    else if (type == 3){
-        return evaler->king_pos_map[pos];
-    }
-    else if (type == 4){
-        return evaler->king_pos_map[pos];
-    }
 
     return 0;
 }
@@ -203,7 +196,7 @@ int get_closest_enemy_dist(long long p1, long long p2, long long p1k, long long 
 }
 
 int king_dist(int pos, int player, int num_pieces) {
-    if (num_pieces > 12) {
+    if (num_pieces > 8) {
         return 0;
     }
 
@@ -228,12 +221,12 @@ int* compute_piece_pos_p1(){
     int table[8][8] = { 
         {0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 3, 0, 3, 0, 0},
-        {0, 0, 1, 1, 1, 1, 0, 0},
+        {0, 0, 0, 3, 0, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0},
         {0, 1, 1, 1, 1, 1, 0, 0},
         {1, 0, 1, 1, 1, 1, 1, 0},
         {0, 2, 0, 2, 0, 2, 0, 2},
-        {0, 0, 3, 0, 3, 0, 3, 0}
+        {0, 0, 4, 0, 3, 0, 4, 0}
     };
     for (int i = 0; i < 64; i++){
         eval_table[i] = table[i / 8][i % 8];
@@ -246,39 +239,17 @@ int* compute_piece_pos_p2(){
     int *eval_table = (int*)malloc(sizeof(int) * 64);
     // mirror the table
     int table[8][8] = { 
-        {0, 3, 0, 3, 0, 3, 0, 0},
+        {0, 4, 0, 3, 0, 4, 0, 0},
         {2, 0, 2, 0, 2, 0, 2, 0},
         {0, 1, 1, 1, 1, 1, 0, 1},
         {0, 0, 1, 1, 1, 1, 1, 0},
-        {0, 0, 1, 1, 1, 1, 0, 0},
-        {0, 0, 3, 0, 3, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 0, 0, 3, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0}
     };
     for (int i = 0; i < 64; i++){
         eval_table[i] = table[i / 8][i % 8];
-    }
-
-    return eval_table;
-}
-
-
-
-// compute the array of king positions containing how good it is to have a king at each position
-int* compute_king_pos(){
-    int *eval_table = (int*)malloc(sizeof(int) * 64);
-        float init_table[8][8] = {
-        {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0}
-        };
-    for (int i = 0; i < 64; i++){
-        eval_table[i] = init_table[i / 8][i % 8];
     }
 
     return eval_table;

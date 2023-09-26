@@ -6,6 +6,23 @@
 // uses a bit set to store the values
 
 #include <stdlib.h>
+#include <stdint.h>
+#include <intrin.h>
+
+static inline int __builtin_ctz(unsigned x)
+{
+    return (int)_tzcnt_u32(x);
+}
+
+static inline int __builtin_ctzll(unsigned long long x)
+{
+#ifdef _WIN64
+    return (int)_tzcnt_u64(x);
+#else
+    return !!unsigned(x) ? __builtin_ctz((unsigned)x) : 32 + __builtin_ctz((unsigned)(x >> 32));
+#endif
+}
+
 
 struct set {
     long long values;
@@ -14,12 +31,10 @@ struct set {
 };
 
 void set_remove(struct set *s, int x){
-    // update the bit set
     s->values &= ~(1ll << x);
 }
 
 void set_add(struct set *s, int x){
-    // update the bit set
     s->values |= (1ll << x); 
 }
 
@@ -54,18 +69,14 @@ void print_set(struct set *s){
 
 // populates/updates the array with the values in the set and returns the number of values in the set
 int populate_set_array(struct set *s){
-    s->size = get_bits_set(s->values);
-    int index = 0;
-    for (int i = 0; i < 64 && index < s->size; i++){
-        if (s->values & (1ll << i)){
-            s->array[index] = i;
-            index++;
-        }
+    unsigned long long number = s->values;
+    s->size = 0;
+    while (number) {
+        unsigned long long set_bit = number & -number; // Extracts the rightmost set bit
+        int position = __builtin_ctzll(set_bit); // Finds the position of the set bit
+        s->array[s->size++] = position;
+        number &= (number - 1); // Clear the rightmost set bit
     }
 
     return s->size;
 }
-
-
-
-
