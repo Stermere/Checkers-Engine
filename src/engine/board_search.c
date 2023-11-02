@@ -504,9 +504,9 @@ int adjust_mate_score(int eval) {
 }
 
 // a function that decides if a search should be extended or reduced at a certain node
-int should_extend_or_reduce(int depth, int depth_abs, int node_num,
+int should_extend_or_reduce(int depth, int depth_abs, int node_num, int alpha, int beta, int eval, int jump,
                             struct hash_table_entry* table_entry,
-                            struct board_evaler* evaler, int jumped){
+                            struct board_evaler* evaler){
     // if the depth is to great reduce it to less than 0
     if (depth_abs >= evaler->max_depth){
         return -100;
@@ -518,13 +518,19 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num,
         node_type = table_entry->node_type;
     }
 
-    if (node_type == PV_NODE && depth_abs < 8){
+    if (node_type == PV_NODE){
         return depth + 1;
     }
 
-    //if (node_type == UPPER_BOUND){
-    //    return depth - 1;
-    //}
+    // reduce the depth if the eval is not in the window + a margin
+    if ((eval <= alpha || eval >= beta) && depth < 10){
+        return depth - 1;
+    }
+
+    // extend jumps near the end of the search to make sure any sequence of jumps is found
+    if (jump && depth < 3){
+        return depth + 1;
+    }
 
     return depth;
 }
@@ -605,6 +611,12 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         if (!captures_only){
             return -1000;
         }
+        // check if there are no normal moves either if so then a win has occured eval who won and return
+        num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, evaler->piece_offsets, False);
+        if (num_moves == 0){
+            return -1000;
+        }
+
         // if there are no moves and captures only is true then we found the end of a catures only search evaluate the position and return
         return get_eval(*p1, *p2, *p1k, *p2k, player, piece_loc, evaler);
     }
@@ -628,7 +640,7 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         add_draw_entry(evaler->draw_table, next_hash);
 
         // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions0
-        int depth_next = should_extend_or_reduce(depth, depth_abs, i, table_entry, evaler, (jumped_piece_type != -1)) - 1;
+        int depth_next = should_extend_or_reduce(depth, depth_abs, i, alpha, beta, board_eval, jumped_piece_type, table_entry, evaler, (jumped_piece_type != -1)) - 1;
 
         // only flip the eval if the player changed
         flip = (player != player_next) ? -1 : 1;
@@ -718,6 +730,8 @@ int MTDF(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     int upper_bound = INFINITY;
     int lower_bound = -INFINITY;
 
+
+
     while (lower_bound < upper_bound) {
         int beta = (g == lower_bound) ? g + 1 : g;
 
@@ -773,7 +787,9 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         evaler->max_depth = min(max(i + 10, 5), search_depth);
 
         // search with MTDF 
-        eval_ = MTDF(&p1, &p2, &p1k, &p2k, player, piece_loc, i, eval_, evaler, hash);
+        //eval_ = MTDF(&p1, &p2, &p1k, &p2k, player, piece_loc, i, eval_, evaler, hash);
+
+        eval_ = negmax(&p1, &p2, &p1k, &p2k, player, piece_loc, i, -INFINITY, INFINITY, 0, evaler, hash, 0, 0);
 
         // get the end time
         end = clock();

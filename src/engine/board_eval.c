@@ -53,8 +53,8 @@ struct board_evaler* board_evaler_constructor(int search_depth, double time_limi
     evaler->avg_depth = 0ll;
     // load the neural network
     //evaler->NN_evaler = load_network_from_file("neural_net/neural_net");
-    //long long int hash_table_size = 1 << 15;
-    long long int hash_table_size = 1 << 20;
+    long long int hash_table_size = 1 << 15;
+    //long long int hash_table_size = 1 << 20;
     evaler->hash_table = init_hash_table(hash_table_size);
     evaler->draw_table = create_draw_table();
     evaler->killer_table = init_killer_table(search_depth);
@@ -89,21 +89,23 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
     int p2knum = 0;
     for (int i = 0; i < num_pieces; i++){
         if (p1 >> piece_loc->array[i] & 1){
-            eval += 30;
+            eval += 50;
             eval += evaluate_pos(1, piece_loc->array[i], evaler);
             eval += king_dist(piece_loc->array[i], 1, num_pieces);
+            //eval += pieces_ahead(p1, p2, p1k, p2k, 1, piece_loc->array[i], num_pieces);
             p1num++;
 
         }
         else if (p2 >> piece_loc->array[i] & 1){
-            eval -= 30;
+            eval -= 50;
             eval -= evaluate_pos(2, piece_loc->array[i], evaler);
             eval -= king_dist(piece_loc->array[i], 2, num_pieces);
+            //eval -= pieces_ahead(p1, p2, p1k, p2k, 2, piece_loc->array[i], num_pieces);
             p2num++;
             
         }
         else if (p1k >> piece_loc->array[i] & 1){
-            eval += 50;
+            eval += 80;
             eval += evaluate_pos(3, piece_loc->array[i], evaler);
             eval += get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 3, piece_loc->array, num_pieces, evaler);
             p1num++;
@@ -111,7 +113,7 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
 
         }
         else if (p2k >> piece_loc->array[i] & 1){
-            eval -= 50;
+            eval -= 80;
             eval -= evaluate_pos(4, piece_loc->array[i], evaler);
             eval -= get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 4, piece_loc->array, num_pieces, evaler);
             p2num++;
@@ -168,8 +170,8 @@ int evaluate_pos(int type, int pos, struct board_evaler* evaler){
 
 // get the distance to the closest enemy piece
 int get_closest_enemy_dist(long long p1, long long p2, long long p1k, long long p2k, int pos, int type, int* piece_loc_array, int num_pieces, struct board_evaler* evaler){
-    // if the number of pieces is less than 10 begin to use the distance table
-    if (num_pieces > 8) {
+    // if the number of pieces is less than 8 begin to use the distance table
+    if (num_pieces < 6) {
         return 0;
     }
     
@@ -207,12 +209,34 @@ int king_dist(int pos, int player, int num_pieces) {
     }
 }
 
+// returns the number of pieces ahead of the piece at pos
+int pieces_ahead(long long p1, long long p2, long long p1k, long long p2k, int type, int pos, int num_pieces) {
+    // get a mask of just the enemy pieces
+    long long check;
+    if (type == 1) {
+        check = p2 | p2k;
+    } else {
+        check = p1 | p1k;
+    }
 
+    int count = 0;
+
+    // mask out pieces that are not in front of the piece
+    if (type == 1) {
+        check &= 0xFFFFFFFFFFFFFFFF >> (64 - (pos - (pos % 8)));
+    }
+    else {
+        check &= 0xFFFFFFFFFFFFFFFF << (pos + (pos % 8));
+    }
+
+    return 8 - get_bits_set(check);
+}
      
 
 int is_trapped_king(long long p1, long long p2, long long p1k, long long p2k, int type, int pos) {
 
 }
+
 
 
 // compute the array of piece positions containing how good it is to have a piece at each position

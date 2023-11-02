@@ -33,9 +33,9 @@ unsigned long long mt_rand(struct mt_state *state);
 struct hash_table_entry {
     unsigned long long int hash;
     int eval;
-    int depth; 
-    int age;
-    int player;
+    char depth; 
+    char age;
+    char player;
     // moves are stored in a format of: top byte is the start square, bottom byte is the end square
     short best_move;
     char node_type;
