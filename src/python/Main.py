@@ -2,7 +2,6 @@
 # uses minimax search with alpha beta pruning to find the best move for the current player
 # developed by Collin Kees
 
-
 import sys
 import os
 from time import process_time
@@ -11,6 +10,7 @@ from Board_opperations import Board, check_jump_required, update_board, check_wi
 import multiprocessing as mp
 
 # import the search engine
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__))))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'build', 'lib.win-amd64-cpython-310')))
 import search_engine
 
