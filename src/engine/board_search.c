@@ -498,8 +498,8 @@ int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, in
 }
 
 int adjust_mate_score(int eval) {
-    return (eval > 500) ?
-         eval - 1 : ((eval < -500) ?
+    return (eval > 900) ?
+         eval - 1 : ((eval < -900) ?
          eval + 1 : eval);
 }
 
@@ -519,16 +519,17 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int alpha, i
     }
 
     if (node_type == PV_NODE){
-        return depth + 1;
+        return depth;
     }
 
+
     // reduce the depth if the eval is not in the window + a margin
-    if ((eval <= alpha || eval >= beta) && depth < 10){
+    if ((eval <= alpha + 50 || eval >= beta - 50) && depth < 8){
         return depth - 1;
     }
 
     // extend jumps near the end of the search to make sure any sequence of jumps is found
-    if (jump && depth < 3){
+    if (jump && (depth < 5)){
         return depth + 1;
     }
 
@@ -818,7 +819,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
 
         // only terminate once the eval has been a mate score for 3 plys
-        else if (eval_ > 500 || eval_ < -500){
+        else if (eval_ > 900 || eval_ < -900){
             terminate = 1;
         }
 
