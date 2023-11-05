@@ -5,7 +5,7 @@ Main.build
 Main.dist
 Main.onefile-build
 src/python/__pycache__
-venv
+.venv
 settings.json
 tasks.json
 
