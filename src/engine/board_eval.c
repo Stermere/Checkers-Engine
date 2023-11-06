@@ -48,13 +48,14 @@ struct board_evaler{
 struct board_evaler* board_evaler_constructor(int search_depth, double time_limit, clock_t start_time){
     struct board_evaler* evaler = (struct board_evaler*)malloc(sizeof(struct board_evaler));
     evaler->piece_pos_map_p1 = compute_piece_pos_p1();
-    evaler->piece_pos_map_p2 = compute_piece_pos_p2();
+    evaler->piece_pos_map_p2 = compute_piece_pos_p2(evaler->piece_pos_map_p1);
+    evaler->king_pos_map = compute_king_pos();
     evaler->nodes = 0ll;
     evaler->avg_depth = 0ll;
     // load the neural network
     //evaler->NN_evaler = load_network_from_file("neural_net/neural_net");
-    long long int hash_table_size = 1 << 15;
-    //long long int hash_table_size = 1 << 20;
+    //long long int hash_table_size = 1 << 10;
+    long long int hash_table_size = 1 << 20;
     evaler->hash_table = init_hash_table(hash_table_size);
     evaler->draw_table = create_draw_table();
     evaler->killer_table = init_killer_table(search_depth);
@@ -100,22 +101,22 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
             eval -= 50;
             eval -= evaluate_pos(2, piece_loc->array[i], evaler);
             eval -= king_dist(piece_loc->array[i], 2, num_pieces);
-            //eval -= pieces_ahead(p1, p2, p1k, p2k, 2, piece_loc->array[i], num_pieces);
+            eval -= pieces_ahead(p1, p2, p1k, p2k, 2, piece_loc->array[i], num_pieces);
             p2num++;
             
         }
         else if (p1k >> piece_loc->array[i] & 1){
-            eval += 80;
+            eval += 70;
             eval += evaluate_pos(3, piece_loc->array[i], evaler);
-            eval += get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 3, piece_loc->array, num_pieces, evaler);
+            //eval += get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 3, piece_loc->array, num_pieces, evaler);
             p1num++;
             p1knum++;
 
         }
         else if (p2k >> piece_loc->array[i] & 1){
-            eval -= 80;
+            eval -= 70;
             eval -= evaluate_pos(4, piece_loc->array[i], evaler);
-            eval -= get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 4, piece_loc->array, num_pieces, evaler);
+            //eval -= get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 4, piece_loc->array, num_pieces, evaler);
             p2num++;
             p2knum++;
         }
@@ -136,20 +137,31 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
         else if (p1num < 2)
             eval -= 100;
     }
-    else if (p1num == p2num){
-        if (p1knum > p2knum){
-            eval += 50 / num_pieces;
-        }
-        else if (p2knum > p1knum){
-            eval -= 50 / num_pieces;
-        }
-    }
 
     // give a bonus to players with structures on the board that are often good
+    // first check
     if (p1 & 0x4400000000000000 ^ 0x4400000000000000 == 0){
-        eval += 5;
+        eval += 7;
     }
     if (p2 & 0x22 ^ 0x22 == 0){
+        eval -= 7;
+    }
+
+    // second check
+    if ((p1 & 0x8000000000 ^ 0x8000000000 == 0) && (p2 & 0x40000000 ^ 0x40000000 == 0)){
+        eval += 10;
+    }
+
+    if ((p2 & 0x1000000 ^ 0x1000000 == 0) && (p1 & 0x200000000 ^ 0x200000000 == 0)){
+        eval -= 10;
+    }
+
+    // third check
+    if ((p1 & 0x1000000 ^ 0x1000000 == 0) && (p2 & 0x20000 ^ 0x20000 == 0)){
+        eval += 5;
+    }
+
+    if ((p2 & 0x8000000000 ^ 0x8000000000 == 0) && (p1 & 0x400000000000 ^ 0x400000000000 == 0)){
         eval -= 5;
     }
 
@@ -164,6 +176,9 @@ int evaluate_pos(int type, int pos, struct board_evaler* evaler){
     else if (type == 2){
         return evaler->piece_pos_map_p2[pos];
     }
+    else if (type == 3 || type == 4){
+        return evaler->king_pos_map[pos];
+    }
 
     return 0;
 }
@@ -171,7 +186,7 @@ int evaluate_pos(int type, int pos, struct board_evaler* evaler){
 // get the distance to the closest enemy piece
 int get_closest_enemy_dist(long long p1, long long p2, long long p1k, long long p2k, int pos, int type, int* piece_loc_array, int num_pieces, struct board_evaler* evaler){
     // if the number of pieces is less than 8 begin to use the distance table
-    if (num_pieces < 6) {
+    if (num_pieces < 8) {
         return 0;
     }
     
@@ -198,7 +213,7 @@ int get_closest_enemy_dist(long long p1, long long p2, long long p1k, long long 
 }
 
 int king_dist(int pos, int player, int num_pieces) {
-    if (num_pieces > 8) {
+    if (num_pieces > 12) {
         return 0;
     }
 
@@ -240,17 +255,17 @@ int is_trapped_king(long long p1, long long p2, long long p1k, long long p2k, in
 
 
 // compute the array of piece positions containing how good it is to have a piece at each position
-int* compute_piece_pos_p1(){
+int* compute_piece_pos_p1() {
     int *eval_table = (int*)malloc(sizeof(int) * 64);
     int table[8][8] = { 
         {0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 3, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 1, 1, 1, 1, 1, 0, 0},
-        {1, 0, 1, 1, 1, 1, 1, 0},
-        {0, 2, 0, 2, 0, 2, 0, 2},
-        {0, 0, 4, 0, 3, 0, 4, 0}
+        {0, 0, 0, 1, 0, 1, 0, 0},
+        {0, 0, 1, 0, 1, 0, 0, 0},
+        {0, 0, 0, 1, 0, 1, 0, 0},
+        {0, 0, 1, 0, 1, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 1},
+        {0, 0, 2, 0, 2, 0, 2, 0}
     };
     for (int i = 0; i < 64; i++){
         eval_table[i] = table[i / 8][i % 8];
@@ -259,23 +274,34 @@ int* compute_piece_pos_p1(){
     return eval_table;
 }
 
-int* compute_piece_pos_p2(){
+int* compute_piece_pos_p2(int* piece_pos_p1) {
     int *eval_table = (int*)malloc(sizeof(int) * 64);
-    // mirror the table
-    int table[8][8] = { 
-        {0, 4, 0, 3, 0, 4, 0, 0},
-        {2, 0, 2, 0, 2, 0, 2, 0},
-        {0, 1, 1, 1, 1, 1, 0, 1},
-        {0, 0, 1, 1, 1, 1, 1, 0},
+    // flip the table
+    for (int i = 0; i < 64; i++){
+        eval_table[i] = piece_pos_p1[63 - i];
+    }
+
+    return eval_table;
+}
+
+int* compute_king_pos() {
+    int *eval_table = (int*)malloc(sizeof(int) * 64);
+    // give center squares a bonus
+    int table[8][8] = {
         {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 3, 0, 0, 0},
+        {0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 5, 5, 4, 4, 0, 0},
+        {0, 0, 5, 5, 4, 4, 0, 0},
+        {0, 0, 4, 4, 5, 5, 0, 0},
+        {0, 0, 4, 4, 5, 5, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0}
     };
+        
     for (int i = 0; i < 64; i++){
         eval_table[i] = table[i / 8][i % 8];
     }
-
+    
     return eval_table;
 }
 
