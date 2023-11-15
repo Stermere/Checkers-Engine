@@ -25,8 +25,6 @@ struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned lo
 struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth);
 struct hash_table_entry* check_for_empty_spot(struct hash_table *table, unsigned long long int hash);
 int check_for_entry(struct hash_table_entry *table, unsigned long long int hash);
-void mt_init(struct mt_state *state, unsigned long long seed);
-unsigned long long mt_rand(struct mt_state *state);
 
 // stores the data related to the hashed value
 // ie. the hash, its evaluation, what is the type of fail (fail high or fail low, or true value), the best move, etc.
@@ -58,6 +56,39 @@ struct mt_state {
     unsigned long long mt[MT_STATE_SIZE];
     int index;
 };
+
+// Initialize the Mersenne Twister state with a seed
+void mt_init(struct mt_state *state, unsigned long long seed) {
+    state->mt[0] = seed;
+    for (int i = 1; i < MT_STATE_SIZE; ++i) {
+        state->mt[i] = 0xFFFFFFFFFFFFFFFFull & (6364136223846793005ull * (state->mt[i - 1] ^ (state->mt[i - 1] >> 62)) + i);
+    }
+    state->index = MT_STATE_SIZE;
+}
+
+// Generate a 64-bit random number using the Mersenne Twister algorithm
+unsigned long long mt_rand(struct mt_state *state) {
+    if (state->index >= MT_STATE_SIZE) {
+        for (int i = 0; i < MT_STATE_SIZE; ++i) {
+            unsigned long long y = (state->mt[i] & 0x8000000000000000ull) + (state->mt[(i + 1) % MT_STATE_SIZE] & 0x7FFFFFFFFFFFFFFFull);
+            state->mt[i] = state->mt[(i + 397) % MT_STATE_SIZE] ^ (y >> 1);
+            if (y % 2 != 0) {
+                state->mt[i] ^= 0x9D2C5680u;
+            }
+        }
+        state->index = 0;
+    }
+
+    unsigned long long y = state->mt[state->index];
+    y ^= (y >> 29) & 0x5555555555555555ull;
+    y ^= (y << 17) & 0x71D67FFFEDA60000ull;
+    y ^= (y << 37) & 0xFFF7EEE000000000ull;
+    y ^= y >> 43;
+
+    state->index++;
+
+    return y;
+}
 
 // initializes the hash table
 struct hash_table* init_hash_table(long long int size){
@@ -209,39 +240,6 @@ unsigned long long int* compute_piece_hash_diffs(){
         piece_hash_diffs[i] = mt_rand(&rng_state);
     }
     return piece_hash_diffs;
-}
-
-// Initialize the Mersenne Twister state with a seed
-void mt_init(struct mt_state *state, unsigned long long seed) {
-    state->mt[0] = seed;
-    for (int i = 1; i < MT_STATE_SIZE; ++i) {
-        state->mt[i] = 0xFFFFFFFFFFFFFFFFull & (6364136223846793005ull * (state->mt[i - 1] ^ (state->mt[i - 1] >> 62)) + i);
-    }
-    state->index = MT_STATE_SIZE;
-}
-
-// Generate a 64-bit random number using the Mersenne Twister algorithm
-unsigned long long mt_rand(struct mt_state *state) {
-    if (state->index >= MT_STATE_SIZE) {
-        for (int i = 0; i < MT_STATE_SIZE; ++i) {
-            unsigned long long y = (state->mt[i] & 0x8000000000000000ull) + (state->mt[(i + 1) % MT_STATE_SIZE] & 0x7FFFFFFFFFFFFFFFull);
-            state->mt[i] = state->mt[(i + 397) % MT_STATE_SIZE] ^ (y >> 1);
-            if (y % 2 != 0) {
-                state->mt[i] ^= 0x9D2C5680u;
-            }
-        }
-        state->index = 0;
-    }
-
-    unsigned long long y = state->mt[state->index];
-    y ^= (y >> 29) & 0x5555555555555555ull;
-    y ^= (y << 17) & 0x71D67FFFEDA60000ull;
-    y ^= (y << 37) & 0xFFF7EEE000000000ull;
-    y ^= y >> 43;
-
-    state->index++;
-
-    return y;
 }
 
 // frees the hash table
