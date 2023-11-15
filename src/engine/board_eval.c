@@ -83,6 +83,8 @@ int get_eval(long long p1, long long p2, long long p1k, long long p2k, int playe
 // calculate the board evaluation
 int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, struct set* piece_loc, struct board_evaler* evaler){
     int eval = 0;
+    int p1_piece_distance = 0;
+    int p2_piece_distance = 0;
     int num_pieces = populate_set_array(piece_loc);
     int p1num = 0;
     int p1knum = 0;
@@ -101,14 +103,14 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
             eval -= 50;
             eval -= evaluate_pos(2, piece_loc->array[i], evaler);
             eval -= king_dist(piece_loc->array[i], 2, num_pieces);
-            eval -= pieces_ahead(p1, p2, p1k, p2k, 2, piece_loc->array[i], num_pieces);
+            //eval -= pieces_ahead(p1, p2, p1k, p2k, 2, piece_loc->array[i], num_pieces);
             p2num++;
             
         }
         else if (p1k >> piece_loc->array[i] & 1){
             eval += 70;
             eval += evaluate_pos(3, piece_loc->array[i], evaler);
-            //eval += get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 3, piece_loc->array, num_pieces, evaler);
+            p1_piece_distance += get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 3, piece_loc->array, num_pieces, evaler);
             p1num++;
             p1knum++;
 
@@ -116,7 +118,7 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
         else if (p2k >> piece_loc->array[i] & 1){
             eval -= 70;
             eval -= evaluate_pos(4, piece_loc->array[i], evaler);
-            //eval -= get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 4, piece_loc->array, num_pieces, evaler);
+            p2_piece_distance -= get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 4, piece_loc->array, num_pieces, evaler);
             p2num++;
             p2knum++;
         }
@@ -129,6 +131,9 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
             eval += 40;
         if (p2num < 2)
             eval += 100;
+
+        // give a bonus for being close to pieces if up in an endgame
+        eval += p1_piece_distance;
     }
     else if (p2num > p1num){
         eval -= 50 / num_pieces;
@@ -136,6 +141,8 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
             eval -= 40;
         else if (p1num < 2)
             eval -= 100;
+
+        eval += p2_piece_distance;
     }
 
     // give a bonus to players with structures on the board that are often good
@@ -260,7 +267,7 @@ int* compute_piece_pos_p1() {
     int table[8][8] = { 
         {0, 0, 0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 1, 0, 1, 0, 0},
+        {0, 0, 0, 3, 0, 2, 0, 0},
         {0, 0, 1, 0, 1, 0, 0, 0},
         {0, 0, 0, 1, 0, 1, 0, 0},
         {0, 0, 1, 0, 1, 0, 0, 0},
@@ -289,12 +296,12 @@ int* compute_king_pos() {
     // give center squares a bonus
     int table[8][8] = {
         {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 5, 5, 4, 4, 0, 0},
-        {0, 0, 5, 5, 4, 4, 0, 0},
-        {0, 0, 4, 4, 5, 5, 0, 0},
-        {0, 0, 4, 4, 5, 5, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0},
+        {0, 0, 5, 0, 0, 0, 0, 0},
+        {0, 5, 0, 5, 0, 4, 0, 0},
+        {0, 0, 5, 0, 4, 0, 0, 0},
+        {0, 0, 0, 4, 0, 5, 0, 0},
+        {0, 0, 4, 0, 5, 0, 5, 0},
+        {0, 0, 0, 0, 0, 5, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 0}
     };
         

@@ -518,20 +518,23 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int alpha, i
         node_type = table_entry->node_type;
     }
 
-    if (node_type == PV_NODE){
-        return depth;
+    // PV-node extension
+    //if (node_type == PV_NODE && depth_abs < 10){
+    //    return depth + 1;
+    //}
+
+    // late move reduction
+    if (depth > 2 && node_num >= 1 && (eval < alpha || eval > beta)){
+        return depth - 1;
     }
-
-
-    // reduce the depth if the eval is not in the window + a margin
-    if ((eval <= alpha + 50 || eval >= beta - 50) && depth < 8){
+    else if (depth > 2 && node_num >= 6) {
         return depth - 1;
     }
 
     // extend jumps near the end of the search to make sure any sequence of jumps is found
-    if (jump && (depth < 5)){
-        return depth + 1;
-    }
+    //if (jump && depth_abs < 5){
+    //    return depth + 1;
+    //}
 
     return depth;
 }
