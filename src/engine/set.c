@@ -18,7 +18,7 @@ static inline int __builtin_ctzll(unsigned long long x)
 #ifdef _WIN64
     return (int)_tzcnt_u64(x);
 #else
-    return !!unsigned(x) ? __builtin_ctz((unsigned)x) : 32 + __builtin_ctz((unsigned)(x >> 32));
+    return !!(unsigned)x ? __builtin_ctz((unsigned)x) : 32 + __builtin_ctz((unsigned)(x >> 32));
 #endif
 }
 
