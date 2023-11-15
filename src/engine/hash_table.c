@@ -60,7 +60,7 @@ struct mt_state {
 };
 
 // initializes the hash table
-struct hash_table* init_hash_table(int size){
+struct hash_table* init_hash_table(long long int size){
     struct hash_table *table = (struct hash_table*)malloc(sizeof(struct hash_table));
     table->table = (struct hash_table_entry*)calloc(size, sizeof(struct hash_table_entry));
     // check for allocation failiure and exit if it does
