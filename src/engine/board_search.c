@@ -7,7 +7,6 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
-#include <windows.h>
 // including the Cboard_eval library also includes the set and transposition tables for the engine
 #include "board_eval.c"
 
@@ -40,7 +39,7 @@ void undo_board_update(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int
 int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, int* moves, struct set* piece_loc, char* offsets, int jump);
 int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, int* save_loc, char* offsets, int only_jump);
 int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
-    struct set* piece_loc, int depth, float alpha, float beta, int captures_only,
+    struct set* piece_loc, int depth, int alpha, int beta, int captures_only,
     struct board_evaler* evaler, unsigned long long int hash, int depth_abs, int node_num);
 struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth);
 void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k);
@@ -276,10 +275,10 @@ int get_piece_at_location(intLong p1, intLong p2, intLong p1k, intLong p2k, int 
 }
 
 // update the board with a move and return the type of piece that was captured
-// returns -1 if no piece was captured
+// returns 0 if no piece was captured
 int update_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece_loc_initial, int piece_loc_after){
     int piece_type = get_piece_at_location(*p1, *p2, *p1k, *p2k, piece_loc_initial);
-    int return_value = -1;
+    int return_value = 0;
     if (piece_type == 1){
         *p1 = *p1 ^ (1ll << piece_loc_initial);
         *p1 = *p1 ^ (1ll << piece_loc_after);
@@ -644,7 +643,7 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         add_draw_entry(evaler->draw_table, next_hash);
 
         // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions0
-        int depth_next = should_extend_or_reduce(depth, depth_abs, i, alpha, beta, board_eval, jumped_piece_type, table_entry, evaler, (jumped_piece_type != -1)) - 1;
+        int depth_next = should_extend_or_reduce(depth, depth_abs, i, alpha, beta, board_eval, jumped_piece_type, table_entry, evaler) - 1;
 
         // only flip the eval if the player changed
         flip = (player != player_next) ? -1 : 1;
@@ -762,10 +761,6 @@ int MTDF(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
 struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth){
     struct search_info* return_struct = malloc(sizeof(struct search_info));
 
-    // handle for colored terminal output
-    HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-
-
     // set for the piece locations
     struct set* piece_loc = get_piece_locations(p1, p2, p1k, p2k);
     int moves[96];
@@ -836,24 +831,16 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
     struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth);
 
     // print the output of the engine
-    SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
     if (PRINT_OUTPUT) {
         printf("\r                                                                   \r");
-        SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_INTENSITY);
         printf("Search Results:\n");
-        SetConsoleTextAttribute(hStdOut, FOREGROUND_GREEN);
         printf("HashTable Hit ratio: %lld\n", (evaler->hash_table->hit_count * 100) / (evaler->hash_table->hit_count + evaler->hash_table->miss_count));
         printf("HashTable Usage: %lld\n", (evaler->hash_table->num_entries * 100llu) / evaler->hash_table->total_size);
         printf("Nodes/s: %fM\n", round_float(((double)evaler->nodes / (cpu_time_used + 0.01)) / 1000000.0));
         printf("Time: %fs\n", cpu_time_used);
-        SetConsoleTextAttribute(hStdOut, FOREGROUND_BLUE | FOREGROUND_INTENSITY | FOREGROUND_GREEN);
         printf("Depth: %d\n", evaler->extended_depth);
         printf("Avg depth: %lld\n", evaler->avg_depth / evaler->nodes);
-
         printf("Eval: %d\n\n", table_entry->eval);
-
-        // set the text color to white
-        SetConsoleTextAttribute(hStdOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
     }
 
     // print the line of best moves to the terminal (deguggigng)
