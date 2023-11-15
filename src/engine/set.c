@@ -8,17 +8,11 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-static inline int __builtin_ctz(unsigned x)
-{
-    return (int)_tzcnt_u32(x);
-}
-
-static inline int __builtin_ctzll(unsigned long long x)
-{
+static inline int countTrailingZeros(unsigned long long x) {
 #ifdef _WIN64
     return (int)_tzcnt_u64(x);
 #else
-    return !!(unsigned)x ? __builtin_ctz((unsigned)x) : 32 + __builtin_ctz((unsigned)(x >> 32));
+    return __builtin_ctzll(x);
 #endif
 }
 
@@ -72,7 +66,7 @@ int populate_set_array(struct set *s){
     s->size = 0;
     while (number) {
         unsigned long long set_bit = number & -number; // Extracts the rightmost set bit
-        int position = __builtin_ctzll(set_bit); // Finds the position of the set bit
+        int position = countTrailingZeros(set_bit); // Finds the position of the set bit
         s->array[s->size++] = position;
         number &= (number - 1); // Clear the rightmost set bit
     }
