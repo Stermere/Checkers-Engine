@@ -8,4 +8,5 @@ src/python/__pycache__
 .venv
 settings.json
 tasks.json
+.vscode
 
