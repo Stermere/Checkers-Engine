@@ -7,7 +7,6 @@
 
 #include <stdlib.h>
 #include <stdint.h>
-#include <intrin.h>
 
 static inline int __builtin_ctz(unsigned x)
 {
