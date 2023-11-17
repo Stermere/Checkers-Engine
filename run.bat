@@ -1,1 +1,1 @@
-".venv/Scripts/python.exe" src/python/Main.py
+".venv/Scripts/python.exe" Marcher_Engine_GUI/flask-server/server.py
