@@ -1,0 +1,1 @@
+".venv/Scripts/python.exe" src/python/Main.py
