@@ -1,0 +1,3 @@
+[submodule "Marcher_Engine_GUI"]
+	path = Marcher_Engine_GUI
+	url = https://github.com/Stermere/Marcher_Engine_GUI
