@@ -1,6 +1,6 @@
 // a small hash table that stores the number of times a position has been reached in the current line of play
 
-#define DRAW_TABLE_SIZE 2000
+#define DRAW_TABLE_SIZE 8000
 
 struct draw_table {
     struct draw_table_entry *table;

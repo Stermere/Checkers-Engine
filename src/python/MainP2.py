@@ -11,7 +11,8 @@ from Board_opperations import Board, check_jump_required, update_board, check_wi
 import multiprocessing as mp
 
 # import the search engine
-sys.path.insert(0, os.getcwd() + "/build/lib.win-amd64-3.9/")
+#sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__))))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'build', 'lib.win-amd64-cpython-310')))
 import search_engine
 
 
@@ -20,11 +21,12 @@ def start_search(board : list, player : int, p_time : int, ply : int, return_dic
     p1, p2, p1k, p2k = convert_to_bitboard(board)
     results = search_engine.search_position(p1, p2, p1k, p2k, player, p_time, ply)
 
-    # update the return dict (stops montycarlo if a search is terminated before the time constraint)
-    return_dict["depth"] = results[-1][0]
-    return_dict["leafs"] = results[-1][1]
-    return_dict["eval"] = results[-1][3]
-    return_dict["hashes"] = results[-1][2]
+    # update the return dict
+    return_dict["depth"] = results[1][0]
+    return_dict["depth_extended"] = results[1][1]
+    return_dict["leafs"] = results[1][2]
+    return_dict["eval"] = results[1][4]
+    return_dict["hashes"] = results[1][3]
 
     # save the object in a touple interpretation to sent it back to the main thread
     return_dict["minmax"] = results

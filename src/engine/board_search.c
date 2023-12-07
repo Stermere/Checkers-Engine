@@ -518,7 +518,7 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int alpha, i
     }
 
     // PV-node extension
-    //if (node_type == PV_NODE && depth_abs < 10){
+    //if (node_type == PV_NODE){
     //    return depth + 1;
     //}
 
@@ -963,7 +963,7 @@ void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, unsigned long 
         depth++;
     }
     printf("\n");
-    human_readble_board(p1, p2, p1k, p2k);
+    //human_readble_board(p1, p2, p1k, p2k);
 }
 
 
