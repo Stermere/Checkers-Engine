@@ -32,7 +32,7 @@ struct set* get_piece_locations(intLong p1, intLong p2, intLong p1k, intLong p2k
 void update_piece_locations(int piece_loc_initial, int piece_loc_after, struct set* piece_loc);
 void undo_piece_locations_update(int piece_loc_initial, int piece_loc_after, struct set* piece_loc);
 void sort_moves(struct board_data* ptr, int player);
-int get_next_board_state(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, int player, char* offsets);
+int get_next_board_state(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, int player, int piece_type, char* offsets);
 int get_piece_at_location(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos);
 int update_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece_loc_initial, int piece_loc_after);
 void undo_board_update(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece_loc_initial, int piece_loc_after, int jumped_piece_type, int initial_piece_type);
@@ -159,7 +159,6 @@ void update_piece_locations(int piece_loc_initial, int piece_loc_after, struct s
     // remove the piece that was moved from the set and add its new location to the set
     set_remove(piece_loc, piece_loc_initial);
     set_add(piece_loc, piece_loc_after);
-
 }
 
 // undo a update the the array of piece locations
@@ -244,11 +243,12 @@ void order_moves(int* moves, int num_moves, struct hash_table_entry* entry, stru
 // returns 1 if the moving player is player 2 returns 0 if the player is player 1
 // pos is the position the piece will be after the first jump and leading in to the second one
 // convenion is that player 1 has internal state of 1 and player 2 has internal state of 2 (ie. 1 is red and 2 is black in a normal match)
-int get_next_board_state(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, int player, char* offsets){
-    // check if the last move was a jump if not invert the state
-    if (!(abs(pos_init - pos_after) > 10)){
+int get_next_board_state(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, int player, int piece_type, char* offsets){
+    // check if the last move was a non-promoting jump, if it wasn't invert the state
+    if ((abs(pos_init - pos_after) < 10) || ((pos_after < 8 || pos_after > 56) && piece_type <= 2)){
         return player ^ 0x3;
     }
+    
     // if the last move was a jump see if it can jump again if so do not change the state
     int move_bucket[8];
     int num_moves = generate_moves(p1, p2, p1k, p2k, pos_after, &move_bucket[0], offsets, True);
@@ -639,7 +639,7 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         initial_piece_type = get_piece_at_location(*p1, *p2, *p1k, *p2k, move_start);
         int jumped_piece_type = update_board(p1, p2, p1k, p2k, move_start, move_end);
         update_piece_locations(move_start, move_end, piece_loc);
-        player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, move_start, move_end, player, evaler->piece_offsets);
+        player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, move_start, move_end, player, initial_piece_type, evaler->piece_offsets);
         add_draw_entry(evaler->draw_table, next_hash);
 
         // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions0
@@ -714,15 +714,12 @@ void PV_labler(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     int initial_piece_type = get_piece_at_location(*p1, *p2, *p1k, *p2k, move_start);
     int jumped_piece_type = update_board(p1, p2, p1k, p2k, move_start, move_end);
     update_piece_locations(move_start, move_end, piece_loc);
-    int player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, move_start, move_end, player, evaler->piece_offsets);
+    int player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, move_start, move_end, player, initial_piece_type, evaler->piece_offsets);
 
     PV_labler(p1, p2, p1k, p2k, player_next, piece_loc, depth - 1, hash, evaler);
 
     undo_piece_locations_update(move_start, move_end, piece_loc);
-    undo_board_update(p1, p2, p1k, p2k, move_start, move_end, jumped_piece_type, initial_piece_type);
-
-
-    
+    undo_board_update(p1, p2, p1k, p2k, move_start, move_end, jumped_piece_type, initial_piece_type);   
 }
 
 int MTDF(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
@@ -899,7 +896,7 @@ long long n_ply_search(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int
         update_piece_locations(pos_init, pos_final, piece_loc);
 
         // get the player that is going to move after this move
-        player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, pos_init, pos_final, player, offsets);
+        player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, pos_init, pos_final, player, intitial_piece_type, offsets);
 
         // call the function recursivly
         total_boards += n_ply_search(p1, p2, p1k, p2k, player_next, piece_loc, offsets, depth - 1);
