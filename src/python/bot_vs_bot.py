@@ -3,7 +3,7 @@
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'build', 'lib.win-amd64-cpython-310')))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'build', 'lib.win-amd64-cpython-3.9')))
+#sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'build', 'lib.win-amd64-cpython-3.9')))
 
 
 import search_engine as se
@@ -11,11 +11,10 @@ import search_engine_old as seo
 
 from copy import deepcopy
 from bitboard_converter import convert_bit_move, convert_to_bitboard, convert_to_matrix
-from Board_opperations import Board, check_jump_required, update_board, check_win, check_tie
-from random import randint
+from Board_opperations import Board, check_jump_required, update_board, check_win, check_tie, generate_all_options
 
-# generates all ll man ballot starting boards (does not make the moves only removes pieces)
-def get11man_boards():
+# Generates all ll man ballot starting boards
+def get11manBoards():
     boards = []
     p1, p2, _, _ = convert_to_bitboard(Board().board)
     for i in [55, 53, 51, 49, 46, 44, 42, 40]:
@@ -26,7 +25,34 @@ def get11man_boards():
             # add the board to the list
             boards.append((next_p1, next_p2, 0, 0))
 
-    return boards
+    # convert them all to matrix boards
+    boards = [convert_to_matrix(board[0], board[1], board[2], board[3]) for board in boards]
+
+    # for each board make one move per side
+    boards_with_moves = []
+    for i in range(len(boards)):
+        board = boards[i]
+        moves = generate_all_options(board, 1, False)
+        # filter out moves off the backrank
+        moves = [move for move in moves if move[0][1] != 0 and move[0][1] != 7]
+        for move in moves:
+            newBoard = deepcopy(board)
+            update_board(move[0], move[1], newBoard)
+
+            moves2 = generate_all_options(newBoard, 2, False)
+            moves2 = [move2 for move2 in moves2 if move2[0][1] != 0 and move2[0][1] != 7]
+            for move2 in moves2:
+                newBoard2 = deepcopy(newBoard)
+                update_board(move2[0], move2[1], newBoard2)
+                boards_with_moves.append(newBoard2)
+
+    # filter out the boards that are the same
+    boards_with_moves = list(set([tuple(map(tuple, board)) for board in boards_with_moves]))
+
+    # convert them back to a list of lists
+    boards_with_moves = [[list(row) for row in board] for board in boards_with_moves]
+
+    return boards_with_moves
 
 
 # start the main loop of the game
@@ -35,21 +61,21 @@ def main(args) -> None:
     player = 1
     board = Board()
     game_history = []
-    p_time = 1
-    ply = 50
+    p_time = 0.1
+    ply = 100
 
     engine_new_wins = 0
     engine_old_wins = 0
+    ties = 0
 
     games_played = 0
 
-    start_states = get11man_boards()
+    start_states = get11manBoards()
 
     # main loop
     for sBoard in start_states:
-
         games_at_start = games_played
-        board.board = convert_to_matrix(sBoard[0], sBoard[1], sBoard[2], sBoard[3])
+        board.board = deepcopy(sBoard)
         while (games_played - games_at_start) < 2:
             game_history.append(deepcopy(board.board))
 
@@ -109,7 +135,7 @@ def main(args) -> None:
                 engine_new_wins += 1
                 games_played += 1
 
-                board.board = convert_to_matrix(sBoard[0], sBoard[1], sBoard[2], sBoard[3])
+                board.board = deepcopy(sBoard)
                 game_history = []
 
                 # filp the player 
@@ -119,7 +145,7 @@ def main(args) -> None:
                 engine_old_wins += 1
                 games_played += 1
 
-                board.board = convert_to_matrix(sBoard[0], sBoard[1], sBoard[2], sBoard[3])
+                board.board = deepcopy(sBoard)
                 game_history = []
 
                 # filp the starting player
@@ -129,8 +155,9 @@ def main(args) -> None:
             elif tie:
                 engine_new_wins += 0.5
                 engine_old_wins += 0.5
+                ties += 1
                 games_played += 1
-                board.board = convert_to_matrix(sBoard[0], sBoard[1], sBoard[2], sBoard[3])
+                board.board = deepcopy(sBoard)
                 game_history = []
 
                 # filp starting player
@@ -139,7 +166,7 @@ def main(args) -> None:
 
             # print the results so far
             if games_played > 0:
-                print(f"new engine: {engine_new_wins} old engine: {engine_old_wins}")
+                print(f"new engine: {engine_new_wins} old engine: {engine_old_wins} ties: {ties} wins: {games_played - ties}")
         
 
 
