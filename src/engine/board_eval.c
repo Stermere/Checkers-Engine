@@ -20,6 +20,7 @@ int get_closest_enemy_dist(long long p1, long long p2, long long p1k, long long 
 int evaluate_pos(int type, int pos, struct board_evaler* evaler);
 char* compute_offsets();
 int king_dist(int pos, int player, int num_pieces);
+int tail_pins(long long p1, long long p2, long long p1k, long long p2k);
 
 
 // struct to hold the data for the hash table and other data related to getting a evaluation for a board
@@ -29,6 +30,8 @@ struct board_evaler{
     int *king_pos_map;
     int search_depth;
     int max_depth;
+    int initial_piece_count_p1;
+    int initial_piece_count_p2;
     struct neural_net *NN_evaler;
     struct hash_table* hash_table;
     struct draw_table* draw_table;
@@ -45,16 +48,17 @@ struct board_evaler{
 
 };
 
-struct board_evaler* board_evaler_constructor(int search_depth, double time_limit, clock_t start_time){
+struct board_evaler* board_evaler_constructor(long long p1_piece_loc, long long p2_piece_loc, int search_depth, double time_limit, clock_t start_time){
     struct board_evaler* evaler = (struct board_evaler*)malloc(sizeof(struct board_evaler));
     evaler->piece_pos_map_p1 = compute_piece_pos_p1();
     evaler->piece_pos_map_p2 = compute_piece_pos_p2(evaler->piece_pos_map_p1);
     evaler->king_pos_map = compute_king_pos();
     evaler->nodes = 0ll;
     evaler->avg_depth = 0ll;
+    evaler->initial_piece_count_p1 = get_bits_set(p1_piece_loc);
+    evaler->initial_piece_count_p2 = get_bits_set(p2_piece_loc);
     // load the neural network
     //evaler->NN_evaler = load_network_from_file("neural_net/neural_net");
-    //long long int hash_table_size = 1 << 10;
     long long int hash_table_size = 1 << 20;
     evaler->hash_table = init_hash_table(hash_table_size);
     evaler->draw_table = create_draw_table();
@@ -69,7 +73,6 @@ struct board_evaler* board_evaler_constructor(int search_depth, double time_limi
 
 // get the evaluation for a board given the board state
 int get_eval(long long p1, long long p2, long long p1k, long long p2k, int player, struct set* piece_loc, struct board_evaler* evaler){
-    // there was no entry found so lets calculate it
     int eval = calculate_eval(p1, p2, p1k, p2k, piece_loc, evaler);
 
     // test neural net
@@ -123,6 +126,9 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
             p2knum++;
         }
     }
+
+    // evaluate the tail pins
+    eval += tail_pins(p1, p2, p1k, p2k);
     
     // give the player with the most pieces a bonus
     if (p1num > p2num){
@@ -145,31 +151,54 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
         eval += p2_piece_distance;
     }
 
-    // give a bonus to players with structures on the board that are often good
-    // first check
-    if (p1 & 0x4400000000000000 ^ 0x4400000000000000 == 0){
-        eval += 7;
+
+    // Give a bonus to players with structures on the board that are often good
+    // Right Lock pattern
+    if ((p1 & 0x8000000000 ^ 0x8000000000) == 0 && ((p2 & 0x40000000 ^ 0x40000000) == 0)){
+        eval += 20;
     }
-    if (p2 & 0x22 ^ 0x22 == 0){
-        eval -= 7;
+    if ((p2 & 0x1000000 ^ 0x1000000) == 0 && ((p1 & 0x200000000 ^ 0x200000000) == 0)){
+        eval -= 20;
     }
 
-    // second check
-    if ((p1 & 0x8000000000 ^ 0x8000000000 == 0) && (p2 & 0x40000000 ^ 0x40000000 == 0)){
+    // Triangle pattern
+    if ((p1 & 0x5020000000000000 ^ 0x5020000000000000) == 0) {
         eval += 10;
     }
-
-    if ((p2 & 0x1000000 ^ 0x1000000 == 0) && (p1 & 0x200000000 ^ 0x200000000 == 0)){
+    if ((p2 & 0x40a ^ 0x40a) == 0) {
         eval -= 10;
     }
 
-    // third check
-    if ((p1 & 0x1000000 ^ 0x1000000 == 0) && (p2 & 0x20000 ^ 0x20000 == 0)){
-        eval += 5;
+    // Oreo Pattern
+    if ((p1 & 0x1408000000000000 ^ 0x1408000000000000) == 0){
+        eval += 10;
+    }
+    if ((p2 & 0x1028 ^ 0x1028) == 0){
+        eval -= 10;
+    }   
+
+    // Bridge Pattern 
+    if ((p1 & 0x4400000000000000 ^ 0x4400000000000000) == 0){
+        eval += 15;
+    }
+    if ((p2 & 0x22 ^ 0x22) == 0){
+        eval -= 15;
     }
 
-    if ((p2 & 0x8000000000 ^ 0x8000000000 == 0) && (p1 & 0x400000000000 ^ 0x400000000000 == 0)){
+    // Dog pattern
+    if (((p1 & 0x4000000000000000 ^ 0x4000000000000000) == 0) && ((p2 & 0x80000000000000 ^ 0x80000000000000) == 0)){
+        eval += 5;
+    }
+    if (((p2 & 0x2 ^ 0x2) == 0) && ((p1 & 0x100 ^ 0x100) == 0)){
         eval -= 5;
+    }
+
+    // King in the corner pattern
+    if ((p1k & 0x80 ^ 0x80) == 0){
+        eval -= 20;
+    }
+    if ((p2k & 0x100000000000000 ^ 0x100000000000000) == 0){
+        eval += 20;
     }
 
     return eval;
@@ -231,6 +260,18 @@ int king_dist(int pos, int player, int num_pieces) {
     }
 }
 
+// Give the player with more tail pins a bonus
+// (a tail pin is a king piece holding back two enemy pieces from behind)
+int tail_pins(long long p1, long long p2, long long p1k, long long p2k) {
+    long long p1p = p1k & (p2 >> 9) & (p2 >> 18);
+    p1p |= p1k & (p2 >> 7) & (p2 >> 14);
+
+    long long p2p = p2k & (p1 << 9) & (p1 << 18);
+    p2p |= p2k & (p1 << 7) & (p1 << 14);
+
+    return (get_bits_set(p1p) - get_bits_set(p2p)) * 5;
+}
+
 // returns the number of pieces ahead of the piece at pos
 int pieces_ahead(long long p1, long long p2, long long p1k, long long p2k, int type, int pos, int num_pieces) {
     // get a mask of just the enemy pieces
@@ -272,7 +313,7 @@ int* compute_piece_pos_p1() {
         {0, 0, 0, 1, 0, 1, 0, 0},
         {0, 0, 1, 0, 1, 0, 0, 0},
         {0, 0, 0, 0, 0, 0, 0, 1},
-        {0, 0, 4, 0, 4, 0, 4, 0}
+        {0, 0, 3, 0, 3, 0, 3, 0}
     };
     for (int i = 0; i < 64; i++){
         eval_table[i] = table[i / 8][i % 8];
