@@ -7,11 +7,9 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
-// including the Cboard_eval library also includes the set and transposition tables for the engine
-#include "board_eval.c"
+#include "board_eval.c" // includes set, transposition table, and board evaler
 
-// define some constants
-#define intLong long long int
+// Define some constants
 #define True 1
 #define False 0
 #define Null 0
@@ -25,78 +23,75 @@
 #include <Python.h>
 
 
-// define some functions
+// Define some functions TODO use a header file for this
 struct board_data;
 struct board_data *board_data_constructor(int player, int move_start, int move_end);
-struct set* get_piece_locations(intLong p1, intLong p2, intLong p1k, intLong p2k);
+struct set* get_piece_locations(long long p1, long long p2, long long p1k, long long p2k);
 void update_piece_locations(int piece_loc_initial, int piece_loc_after, struct set* piece_loc);
 void undo_piece_locations_update(int piece_loc_initial, int piece_loc_after, struct set* piece_loc);
 void sort_moves(struct board_data* ptr, int player);
-int get_next_board_state(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, int player, int piece_type, char* offsets);
-int get_piece_at_location(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos);
-int update_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece_loc_initial, int piece_loc_after);
-void undo_board_update(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece_loc_initial, int piece_loc_after, int jumped_piece_type, int initial_piece_type);
-int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, int* moves, struct set* piece_loc, char* offsets, int jump);
-int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, int* save_loc, char* offsets, int only_jump);
-int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
-    struct set* piece_loc, int depth, int alpha, int beta, int captures_only,
+int get_next_board_state(long long p1, long long p2, long long p1k, long long p2k, int pos_init, int pos_after, int player, int piece_type, char* offsets);
+int get_piece_at_location(long long p1, long long p2, long long p1k, long long p2k, int pos);
+int update_board(long long* p1, long long* p2, long long* p1k, long long* p2k, int piece_loc_initial, int piece_loc_after);
+void undo_board_update(long long* p1, long long* p2, long long* p1k, long long* p2k, int piece_loc_initial, int piece_loc_after, int jumped_piece_type, int initial_piece_type);
+int generate_all_moves(long long p1, long long p2, long long p1k, long long p2k, int player, int* moves, struct set* piece_loc, char* offsets, int* jump);
+int generate_moves(long long p1, long long p2, long long p1k, long long p2k, int pos, int* save_loc, char* offsets, int only_jump);
+int negmax(long long* p1, long long* p2, long long* p1k, long long* p2k, int player,
+    struct set* piece_loc, int depth, int alpha, int beta,
     struct board_evaler* evaler, unsigned long long int hash, int depth_abs, int node_num);
-struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth);
-void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k);
-long long n_ply_search(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player, struct set* piece_loc, int* offsets, int depth);
+struct search_info* start_board_search(long long p1, long long p2, long long p1k, long long p2k, int player, float search_time, int search_depth);
+void human_readble_board(long long p1, long long p2, long long p1k, long long p2k);
+long long n_ply_search(long long* p1, long long* p2, long long* p1k, long long* p2k, int player, struct set* piece_loc, int* offsets, int depth);
 void quick_sort(struct board_data* ptr, int low, int high);
 int partition(struct board_data* ptr, int low, int high);
-unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, unsigned long long int hash, struct board_evaler* evaler);
+unsigned long long int update_hash(long long p1, long long p2, long long p1k, long long p2k, int pos_init, int pos_after, unsigned long long int hash, struct board_evaler* evaler);
 struct board_data* get_best_move(struct board_data *head, int player);
 void end_board_search(struct board_evaler* evaler);
 int free_board_data(struct board_data* data);
-void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, unsigned long long hash, struct board_evaler* evaler);
+void print_line(long long p1, long long p2, long long p1k, long long p2k, unsigned long long hash, struct board_evaler* evaler);
 
 
-// holds the head to the board_tree and the evaler struct
+// Holds the head to the board_tree and the evaler struct
 struct search_info {
     struct board_evaler* evaler;
     struct hash_table_entry* entry;
 };
 
-// python comunication code 
+// Python comunication code 
 
-// make a python extension function that takes a touple as argument
-// and returns a list of integers that represent the best moves for the board
+// Python function to search the board
 static PyObject* search_position(PyObject *self, PyObject *args){
     unsigned long long int p1, p2, p1k, p2k, player, search_depth;
     float search_time;
 
-    // get the arguments from python
+    // Get the arguments from python (p1, p2, p1k, p2k, player, search_time, search_depth)
     if (!PyArg_ParseTuple(args, "KKKKKfK", &p1, &p2, &p1k, &p2k, &player, &search_time, &search_depth))
         return NULL;
 
-    // call the search function
+    // Get the Result
     struct search_info* search_info = start_board_search(p1, p2, p1k, p2k, player, search_time, search_depth);
 
-    // package the relevant data into a python tuple
+    // Package the relevant data into a python tuple
     PyObject* py_list = PyList_New(0);
     PyObject* py_tuple;
-
-    // add the best move
     py_tuple = Py_BuildValue("ii", (search_info->entry->best_move >> 8) & 0xFF, search_info->entry->best_move & 0xFF);
     PyList_Append(py_list, py_tuple);
 
     
-    // get some stats about the search
+    // Get some stats about the search
     py_tuple = Py_BuildValue("KKKKi", search_info->evaler->search_depth, search_info->evaler->extended_depth,
                         search_info->evaler->nodes, search_info->evaler->hash_table->num_entries,
                         search_info->entry->eval);
     PyList_Append(py_list, py_tuple);
 
-    // free the search tree the evaler and the transposition table
+    // Free the search tree the evaler and the transposition table
     end_board_search(search_info->evaler);
 
-    // return the python tuple
+    // Return the python tuple
     return py_list;
 }
 
-// tell the pyhton interpreter about the functions we want to use
+// Tell the pyhton interpreter about the functions we want to use
 static PyMethodDef c_board_search_methods[] = {
     {"search_position", search_position, METH_VARARGS, 
     "takes the 6 64bit integers for the board\
@@ -105,7 +100,7 @@ static PyMethodDef c_board_search_methods[] = {
     {NULL, NULL, 0, NULL}
 };
 
-// define the module
+// Define the module
 static struct PyModuleDef search_engine = {
     PyModuleDef_HEAD_INIT,
     "search_engine",
@@ -133,7 +128,7 @@ float round_float(float num){
 // takes the board as arguments
 // returns a set of all the pieces on the board
 // note: assumes a valid board
-struct set* get_piece_locations(intLong p1, intLong p2, intLong p1k, intLong p2k){
+struct set* get_piece_locations(long long p1, long long p2, long long p1k, long long p2k){
     struct set* piece_loc = create_set();
     for (int i = 0; i < 64; i++){
         if (get_piece_at_location(p1, p2, p1k, p2k, i) != 0){
@@ -243,7 +238,7 @@ void order_moves(int* moves, int num_moves, struct hash_table_entry* entry, stru
 // returns 1 if the moving player is player 2 returns 0 if the player is player 1
 // pos is the position the piece will be after the first jump and leading in to the second one
 // convenion is that player 1 has internal state of 1 and player 2 has internal state of 2 (ie. 1 is red and 2 is black in a normal match)
-int get_next_board_state(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, int player, int piece_type, char* offsets){
+int get_next_board_state(long long p1, long long p2, long long p1k, long long p2k, int pos_init, int pos_after, int player, int piece_type, char* offsets){
     // check if the last move was a non-promoting jump, if it wasn't invert the state
     if ((abs(pos_init - pos_after) < 10) || ((pos_after < 8 || pos_after > 56) && piece_type <= 2)){
         return player ^ 0x3;
@@ -260,7 +255,7 @@ int get_next_board_state(intLong p1, intLong p2, intLong p1k, intLong p2k, int p
 }   
 
 // get the type of piece at the position specified
-int get_piece_at_location(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos){
+int get_piece_at_location(long long p1, long long p2, long long p1k, long long p2k, int pos){
     if (p1 >> pos & 1){
         return 1;
     } else if (p2 >> pos & 1){
@@ -276,7 +271,7 @@ int get_piece_at_location(intLong p1, intLong p2, intLong p1k, intLong p2k, int 
 
 // update the board with a move and return the type of piece that was captured
 // returns 0 if no piece was captured
-int update_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece_loc_initial, int piece_loc_after){
+int update_board(long long* p1, long long* p2, long long* p1k, long long* p2k, int piece_loc_initial, int piece_loc_after){
     int piece_type = get_piece_at_location(*p1, *p2, *p1k, *p2k, piece_loc_initial);
     int return_value = 0;
     if (piece_type == 1){
@@ -319,7 +314,7 @@ int update_board(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece
 }
 
 // reverse the a board update
-void undo_board_update(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int piece_loc_initial, int piece_loc_after, int jumped_piece_type, int initial_piece_type){
+void undo_board_update(long long* p1, long long* p2, long long* p1k, long long* p2k, int piece_loc_initial, int piece_loc_after, int jumped_piece_type, int initial_piece_type){
     int piece_type = get_piece_at_location(*p1, *p2, *p1k, *p2k, piece_loc_after);
     if (piece_type == 1){
         *p1 = *p1 ^ (1ll << piece_loc_initial);
@@ -358,7 +353,7 @@ void undo_board_update(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int
 }
 
 // updates the hash with the moves that will be made to get to the next move
-unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos_init, int pos_after, unsigned long long int hash, struct board_evaler* evaler){
+unsigned long long int update_hash(long long p1, long long p2, long long p1k, long long p2k, int pos_init, int pos_after, unsigned long long int hash, struct board_evaler* evaler){
     int piece_type = get_piece_at_location(p1, p2, p1k, p2k, pos_init);
     int jumped_piece_type = -1;
     if (abs(pos_init - pos_after) > 10){
@@ -393,17 +388,12 @@ unsigned long long int update_hash(intLong p1, intLong p2, intLong p1k, intLong 
 // takes the board and a memory location to save to as arguments
 // returns the number of moves generated
 // note: moves should have room for 96 elements as this is the maximum number of moves possible on a legal board
-int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, int* moves, struct set* piece_loc, char* offsets, int jump){
+int generate_all_moves(long long p1, long long p2, long long p1k, long long p2k, int player, int* moves, struct set* piece_loc, char* offsets, int* jump){
     // setup variables
     int num_moves = 0;
     int move_from_pos = 0;
     int type;
-    int friendly_pieces;
-    if (player == 1){
-        friendly_pieces = 3;
-    } else {
-        friendly_pieces = 4;
-    }
+    int friendly_pieces = 2 + player;
     int num_pieces = populate_set_array(piece_loc);
 
     // loop over all the locations with a piece and generate the moves for each one
@@ -412,11 +402,11 @@ int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pla
         type = get_piece_at_location(p1, p2, p1k, p2k, piece_loc->array[i]);
         if (type == player || type == friendly_pieces){
             // generate the moves for the piece
-            move_from_pos = generate_moves(p1, p2, p1k, p2k, piece_loc->array[i], moves + (num_moves * 2), offsets, jump);
+            move_from_pos = generate_moves(p1, p2, p1k, p2k, piece_loc->array[i], moves + (num_moves * 2), offsets, *jump);
             if (move_from_pos == -1){
                 num_moves = 0;
-                jump = 1;
-                move_from_pos = generate_moves(p1, p2, p1k, p2k, piece_loc->array[i], moves + (num_moves * 2), offsets, jump);
+                *jump = 1;
+                move_from_pos = generate_moves(p1, p2, p1k, p2k, piece_loc->array[i], moves + (num_moves * 2), offsets, *jump);
                 num_moves += move_from_pos;
             }
             // if no special cases occured add the moves to the counter
@@ -432,7 +422,7 @@ int generate_all_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pla
 // takes the board, the piece position, memory location to save, and a jump flag as arguments
 // returns the number of moves generated or -1 if a jump was found and the jump flag was not set
 // note: save_loc should have room for 8 int
-int generate_moves(intLong p1, intLong p2, intLong p1k, intLong p2k, int pos, int* save_loc, char* offsets, int only_jump){
+int generate_moves(long long p1, long long p2, long long p1k, long long p2k, int pos, int* save_loc, char* offsets, int only_jump){
     // get the offset index for the position, then initialized some variables
     int offset_index = pos * 4;
     int num_moves = 0;
@@ -503,10 +493,9 @@ int adjust_mate_score(int eval) {
 }
 
 // a function that decides if a search should be extended or reduced at a certain node
-int should_extend_or_reduce(int depth, int depth_abs, int node_num, int alpha, int beta, int eval, int jump,
+int should_extend_or_reduce(int depth, int depth_abs, int node_num, int eval, int jump, int player, long long p1All, long long p2All,
                             struct hash_table_entry* table_entry,
-                            struct board_evaler* evaler){
-    // if the depth is to great reduce it to less than 0
+                            struct board_evaler* evaler) {
     if (depth_abs >= evaler->max_depth){
         return -100;
     }
@@ -518,36 +507,36 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int alpha, i
     }
 
     // PV-node extension
-    //if (node_type == PV_NODE){
-    //    return depth + 1;
-    //}
+    if (node_type == PV_NODE && depth_abs < 10){
+           depth++;
+    }
+
+    // If this line has a player down more than from the root of the tree, reduce the search as long
+    // as this is not the principal variation
+    int root_piece_dif = evaler->initial_piece_count_p1 - evaler->initial_piece_count_p2;
+    int piece_dif = get_bits_set(p1All) - get_bits_set(p2All);
+    if (!jump && ((piece_dif - root_piece_dif < 0 && player == 1) || (piece_dif - root_piece_dif > 0 && player == 2))) {
+        depth -= 1;
+    }
 
     // late move reduction
-    if (depth > 2 && node_num >= 1 && (eval < alpha || eval > beta)){
-        return depth - 1;
+    if (depth >= 2 && node_num >= 6) {
+        depth--;
     }
-    else if (depth > 2 && node_num >= 6) {
-        return depth - 1;
-    }
-
-    // extend jumps near the end of the search to make sure any sequence of jumps is found
-    //if (jump && depth_abs < 5){
-    //    return depth + 1;
-    //}
 
     return depth;
 }
 
 // search the board for the best move recursivly and return the best eval that can be achived from that board position
 // the best_moves struct will be populated to the search depth at the end of this search
-int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
-    struct set* piece_loc, int depth, int alpha, int beta, int captures_only,
+int negmax(long long* p1, long long* p2, long long* p1k, long long* p2k, int player,
+    struct set* piece_loc, int depth, int alpha, int beta,
     struct board_evaler* evaler, unsigned long long int hash, int depth_abs, int node_num){
     // setup variables
     int player_next;
     int board_eval = -2000;
     int num_moves;
-    float alpha_orig = alpha;
+    int alpha_orig = alpha;
     int initial_piece_type;
     unsigned long long int next_hash;
 
@@ -592,14 +581,12 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         return 0;
     }
 
-    // if the depth is 0 then we are at the end of the standard search so begin the captures search
-    if (depth <= 0){
-        captures_only = True;
-    }
-
     // get the moves for this board and player combo
     int moves[96];
-    num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, evaler->piece_offsets, captures_only);
+    int force_captures = (depth <= 0) ? 1 : 0;
+    int is_jump = force_captures;
+
+    num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, evaler->piece_offsets, &is_jump);
 
     // before continuing from this block of code, check if the hash table has a value for this board
     // if it does then use that to order the moves
@@ -611,11 +598,12 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     // this is not a perfect check but it should be good enough
     if (num_moves == 0){
         // if there are no moves and captures only is false then a win has occured eval who won and return
-        if (!captures_only){
+        if (!force_captures){
             return -1000;
         }
-        // check if there are no normal moves either if so then a win has occured eval who won and return
-        num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, evaler->piece_offsets, False);
+        // if not already generating all moves then generate all moves regardless of depth to check for a win
+        int captures = 0;
+        num_moves = generate_all_moves(*p1, *p2, *p1k, *p2k, player, &moves[0], piece_loc, evaler->piece_offsets, &captures);
         if (num_moves == 0){
             return -1000;
         }
@@ -623,6 +611,8 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         // if there are no moves and captures only is true then we found the end of a catures only search evaluate the position and return
         return get_eval(*p1, *p2, *p1k, *p2k, player, piece_loc, evaler);
     }
+
+    depth = should_extend_or_reduce(depth, depth_abs, node_num, board_eval, force_captures, player, *p1 | *p1k, *p2 | *p2k, table_entry, evaler);
 
     // the the next boards are ready to be searched so begin the search!
     short best_move = NO_MOVE;
@@ -642,15 +632,12 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
         player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, move_start, move_end, player, initial_piece_type, evaler->piece_offsets);
         add_draw_entry(evaler->draw_table, next_hash);
 
-        // some moves are very bad and should be prunned before they are even considered this function handles all of the extensions and reductions0
-        int depth_next = should_extend_or_reduce(depth, depth_abs, i, alpha, beta, board_eval, jumped_piece_type, table_entry, evaler) - 1;
-
         // only flip the eval if the player changed
         flip = (player != player_next) ? -1 : 1;
         next_alpha = (flip == 1) ? alpha : -beta;
         next_beta = (flip == 1) ? beta : -alpha;
-        eval = negmax(p1, p2, p1k, p2k, player_next, piece_loc, depth_next,
-                    next_alpha, next_beta, captures_only, evaler, next_hash,
+        eval = negmax(p1, p2, p1k, p2k, player_next, piece_loc, depth - 1,
+                    next_alpha, next_beta, evaler, next_hash,
                     depth_abs + 1, i) * flip;
         
         // undo the update to the board and piece locations
@@ -697,7 +684,7 @@ int negmax(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
 }
 
 // marks pv nodes in the hash table
-void PV_labler(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
+void PV_labler(long long* p1, long long* p2, long long* p1k, long long* p2k, int player,
     struct set* piece_loc, int depth, unsigned long long int hash, struct board_evaler* evaler) {
 
     struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth);
@@ -722,7 +709,7 @@ void PV_labler(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     undo_board_update(p1, p2, p1k, p2k, move_start, move_end, jumped_piece_type, initial_piece_type);   
 }
 
-int MTDF(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
+int MTDF(long long* p1, long long* p2, long long* p1k, long long* p2k, int player,
     struct set* piece_loc, int depth, int f, struct board_evaler* evaler,
     unsigned long long int hash) {
     
@@ -735,7 +722,7 @@ int MTDF(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
     while (lower_bound < upper_bound) {
         int beta = (g == lower_bound) ? g + 1 : g;
 
-        g = negmax(p1, p2, p1k, p2k, player, piece_loc, depth, beta - 1, beta, 0,
+        g = negmax(p1, p2, p1k, p2k, player, piece_loc, depth, beta - 1, beta,
             evaler, hash, 0, 0);
 
         if (g < beta) {
@@ -755,7 +742,7 @@ int MTDF(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player,
 
 // prepare needed memory for a search and call the search function to find the best move and return a pointer to the memory 
 // location that holds the moves for the board ordered in the order best to worst
-struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intLong p2k, int player, float search_time, int search_depth){
+struct search_info* start_board_search(long long p1, long long p2, long long p1k, long long p2k, int player, float search_time, int search_depth){
     struct search_info* return_struct = malloc(sizeof(struct search_info));
 
     // set for the piece locations
@@ -764,14 +751,15 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
 
     clock_t start, end;
     start = clock();
-    struct board_evaler* evaler = board_evaler_constructor(search_depth, search_time, start); 
+    struct board_evaler* evaler = board_evaler_constructor(p1 | p1k, p2 | p2k, search_depth, search_time, start);
 
-    intLong hash = get_hash(p1, p2, p1k, p2k, evaler->hash_table);
+    long long hash = get_hash(p1, p2, p1k, p2k, evaler->hash_table);
     double cpu_time_used;
     int depth;
     int extended_depth;
     int terminate = 0;
     int eval_ = 0;
+    int jump = 0;
     
     // call the search function
     for (int i = 1; i <= search_depth; i++){
@@ -785,7 +773,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         // search with MTDF 
         //eval_ = MTDF(&p1, &p2, &p1k, &p2k, player, piece_loc, i, eval_, evaler, hash);
 
-        eval_ = negmax(&p1, &p2, &p1k, &p2k, player, piece_loc, i, -INFINITY, INFINITY, 0, evaler, hash, 0, 0);
+        eval_ = negmax(&p1, &p2, &p1k, &p2k, player, piece_loc, i, -INFINITY, INFINITY, evaler, hash, 0, 0);
 
         // get the end time
         end = clock();
@@ -819,7 +807,7 @@ struct search_info* start_board_search(intLong p1, intLong p2, intLong p1k, intL
         }
 
         // if there is only one move left then terminate
-        else if (generate_all_moves(p1, p2, p1k, p2k, player, &moves[0], piece_loc, evaler->piece_offsets, 0) == 1){
+        else if (generate_all_moves(p1, p2, p1k, p2k, player, &moves[0], piece_loc, evaler->piece_offsets, &jump) == 1){
             terminate = 1;
         }
     }
@@ -867,7 +855,7 @@ void end_board_search(struct board_evaler* evaler){
 
 // search to the depth specified and count to total amount of boards for a certain depth
 // this is used to test if the move generation is working as expected and to see how much time is spent
-long long n_ply_search(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int player, struct set* piece_loc, int* offsets, int depth){
+long long n_ply_search(long long* p1, long long* p2, long long* p1k, long long* p2k, int player, struct set* piece_loc, int* offsets, int depth){
     // make a int array of size 96 elements to hold the moves
     int moves[96];
     long long total_boards = 0;
@@ -911,7 +899,7 @@ long long n_ply_search(intLong* p1, intLong* p2, intLong* p1k, intLong* p2k, int
 }
 
 // print the board to standard out in a human readable format (for debugging)
-void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k){
+void human_readble_board(long long p1, long long p2, long long p1k, long long p2k){
     printf("  0 1 2 3 4 5 6 7 \n");
     for (int row = 0; row < 8; row++){
         printf("%d ", row);
@@ -938,7 +926,7 @@ void human_readble_board(intLong p1, intLong p2, intLong p1k, intLong p2k){
 }
 
 // print the expected line to standard out in a human readable format (for debugging)
-void print_line(intLong p1, intLong p2, intLong p1k, intLong p2k, unsigned long long hash, struct board_evaler* evaler){
+void print_line(long long p1, long long p2, long long p1k, long long p2k, unsigned long long hash, struct board_evaler* evaler){
     // use the hash table to make the line of moves
     printf("PV ");
     int depth = 0;
@@ -973,16 +961,16 @@ int main(){
 
     // setup initial board and search structures
     // starting bit values
-    intLong p1 = 6172839697753047040;
-    intLong p2 = 11163050;
-    intLong p1k = 0;
-    intLong p2k = 0;
+    long long p1 = 6172839697753047040;
+    long long p2 = 11163050;
+    long long p1k = 0;
+    long long p2k = 0;
 
     // end game player 2 winning endgame
-    //intLong p1 = 5838922414443986944;
-    //intLong p2 = 8409224;
-    //intLong p1k = 0;
-    //intLong p2k = 288230376154333184;
+    //long long p1 = 5838922414443986944;
+    //long long p2 = 8409224;
+    //long long p1k = 0;
+    //long long p2k = 288230376154333184;
 
 
     int player = 1;
