@@ -13,7 +13,7 @@
 #define NO_MOVE 0 // no move was found
 
 #define MT_STATE_SIZE 624
-#define NUMBER_OF_BUCKETS 4
+#define NUMBER_OF_BUCKETS 2
 
 
 // define functions
