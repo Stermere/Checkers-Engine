@@ -519,11 +519,6 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int eval, in
         depth -= 1;
     }
 
-    // late move reduction
-    if (depth >= 2 && node_num >= 6) {
-        depth--;
-    }
-
     return depth;
 }
 
