@@ -1,10 +1,16 @@
 # Checkers-Engine (Marcher Engine)
-This engine uses the neg-max algorithm with alpha-beta pruning and a slew of other optimizations to compute the best move for a position. In its current state, it is a very strong player. The best and easiest way to play against it is to visit its web app at https://ckees1.pythonanywhere.com the source code for which is also available on my GitHub!
+This engine uses the neg-max algorithm with alpha-beta pruning and several other optimizations to compute the best move for a position. In its current state, it is a solid player. The best and easiest way to play against it is to visit its web app at [my website](https://ckees1.pythonanywhere.com) the source code for which is also available on my GitHub!
+
+## Web Application
+
+For an optimal experience, play against the Marcher Engine through the web application:
+
+- **Web App**: [Play Here](https://ckees1.pythonanywhere.com)
+
+The Web App's max playing strength is strong but not unbeatable by any measure, for better play run the engine locally with a larger time control.
 
 ## How to set up to play against 
 1. **Clone the repository:**
-   - Open your terminal or command prompt.
-   - Navigate to the directory where you want to clone the repository.
    - Run the following command to clone the repository from GitHub:
      ```
      git clone https://github.com/Stermere/Checkers-Engine
@@ -18,4 +24,4 @@ This engine uses the neg-max algorithm with alpha-beta pruning and a slew of oth
    - After initializing the virtual environment, run the `build.bat` script. This will Package the C code into a Python module
 
 4. **Run `run.bat`:**
-   - Finally, to play against Marcher Engine on your local machine, execute the `run.bat` script. This script will open up the old GUI for you to play against! (I do recommend using the website though, it has many more creature comforts and nearly the same playing strength)
+   - Finally, to play against Marcher Engine on your local machine, execute the `run.bat` script. This script will host the website on your local network. 
