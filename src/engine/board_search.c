@@ -500,23 +500,36 @@ int should_extend_or_reduce(int depth, int depth_abs, int node_num, int eval, in
         return -100;
     }
 
-    // extract the node type from the table entry
+    if (jump){
+        return depth;
+    }
+
+    // Extract the node type from the table entry
     int node_type = UNKNOWN_NODE;
     if (table_entry != NULL){
         node_type = table_entry->node_type;
     }
 
     // PV-node extension
-    if (node_type == PV_NODE && depth_abs < 10){
+    if (node_type == PV_NODE && depth_abs > 8){
            depth++;
     }
 
-    // If this line has a player down more than from the root of the tree, reduce the search as long
-    // as this is not the principal variation
-    int root_piece_dif = evaler->initial_piece_count_p1 - evaler->initial_piece_count_p2;
-    int piece_dif = get_bits_set(p1All) - get_bits_set(p2All);
-    if (!jump && ((piece_dif - root_piece_dif < 0 && player == 1) || (piece_dif - root_piece_dif > 0 && player == 2))) {
-        depth -= 1;
+    int p1_initial_piece_count = evaler->initial_piece_count_p1;
+    int p2_initial_piece_count = evaler->initial_piece_count_p2;
+    int p1_piece_count = get_bits_set(p1All);
+    int p2_piece_count = get_bits_set(p2All);
+
+    // Reduce lines that are not likely to be good ie where one player has lost 2 or more pieces and the other has not
+    if (player == 1 && (p2_initial_piece_count - p2_piece_count) - (p1_initial_piece_count - p1_piece_count) >= 2){
+        depth -= 2;
+    } else if (player == 2 && (p1_initial_piece_count - p1_piece_count) - (p2_initial_piece_count - p2_piece_count) >= 2){
+        depth -= 2;
+    }
+
+    // Reduce late moves
+    if (node_num > 5 && depth_abs > 8){
+        depth--;
     }
 
     return depth;

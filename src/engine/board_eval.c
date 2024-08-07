@@ -21,6 +21,7 @@ int evaluate_pos(int type, int pos, struct board_evaler* evaler);
 char* compute_offsets();
 int king_dist(int pos, int player, int num_pieces);
 int tail_pins(long long p1, long long p2, long long p1k, long long p2k);
+int calculatePieceBonus(int num_pieces);
 
 
 // struct to hold the data for the hash table and other data related to getting a evaluation for a board
@@ -113,7 +114,7 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
         else if (p1k >> piece_loc->array[i] & 1){
             eval += 70;
             eval += evaluate_pos(3, piece_loc->array[i], evaler);
-            p1_piece_distance += get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 3, piece_loc->array, num_pieces, evaler);
+            //p1_piece_distance += get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 3, piece_loc->array, num_pieces, evaler);
             p1num++;
             p1knum++;
 
@@ -121,7 +122,7 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
         else if (p2k >> piece_loc->array[i] & 1){
             eval -= 70;
             eval -= evaluate_pos(4, piece_loc->array[i], evaler);
-            p2_piece_distance -= get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 4, piece_loc->array, num_pieces, evaler);
+            //p2_piece_distance -= get_closest_enemy_dist(p1, p2, p1k, p2k, piece_loc->array[i], 4, piece_loc->array, num_pieces, evaler);
             p2num++;
             p2knum++;
         }
@@ -132,22 +133,11 @@ int calculate_eval(long long p1, long long p2, long long p1k, long long p2k, str
     
     // give the player with the most pieces a bonus
     if (p1num > p2num){
-        eval += 50 / num_pieces;
-        if (p2num < 3)
-            eval += 40;
-        if (p2num < 2)
-            eval += 100;
-
-        // give a bonus for being close to pieces if up in an endgame
+        eval += calculatePieceBonus(p1num);
         eval += p1_piece_distance;
     }
     else if (p2num > p1num){
-        eval -= 50 / num_pieces;
-        if (p1num < 3)
-            eval -= 40;
-        else if (p1num < 2)
-            eval -= 100;
-
+        eval -= calculatePieceBonus(p2num);
         eval += p2_piece_distance;
     }
 
@@ -217,6 +207,15 @@ int evaluate_pos(int type, int pos, struct board_evaler* evaler){
     }
 
     return 0;
+}
+
+int calculatePieceBonus(int num_pieces) {
+    if (num_pieces <= 2) return 200;
+    if (num_pieces == 3) return 150;
+    if (num_pieces == 4) return 100;
+    if (num_pieces == 5) return 60;
+    if (num_pieces == 6) return 30;
+    return 10;  // For num_pieces > 6
 }
 
 // get the distance to the closest enemy piece
