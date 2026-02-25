@@ -1,16 +1,15 @@
 import torch
-import torch.nn as nn
 import torch.onnx
 from copy import deepcopy
 from multiprocessing import Pool
-import seaborn as sns
-import matplotlib.pyplot as plt
 from random import shuffle
+import sys
+import os
 
 import Board_opperations as bo
 import bitboard_converter as bc
-import os
-import sys
+import NeuralNet as nn
+import LinearReg as lr
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'build', 'lib.win-amd64-cpython-310')))
 import search_engine as se
@@ -23,88 +22,6 @@ P2K_INPUT_START = 32
 P1_INPUT_START = 64
 P2_INPUT_START = 92
 PLAYER_INPUT_START = 120
-
-class Net(torch.nn.Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        self.input_size = INPUT_SIZE
-        self.hidden_size = 32
-        self.output_size = 1
-
-        self.fc1 = torch.nn.Linear(self.input_size, self.hidden_size)
-        self.fc2 = torch.nn.Linear(self.hidden_size, self.hidden_size)
-        self.fc3 = torch.nn.Linear(self.hidden_size, self.output_size)
-
-    def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        return self.fc3(x)
-
-    def trainModel(self, X, y, epochs=5, lr=0.005, batchSize=16, criterion=torch.nn.MSELoss()):
-        optimizer = torch.optim.Adam(self.parameters(), lr=lr)
-        torch.set_grad_enabled(True)
-
-        # Train the model
-        for epoch in range(epochs):
-            totalLoss = 0
-            numLosses = 0
-            # Train the model on each batch
-            for i in range(0, len(X) - batchSize, batchSize):
-                optimizer.zero_grad()
-                X_batch = X[i:i + batchSize]
-                y_batch = y[i:i + batchSize]
-                X_batch = torch.stack(X_batch)
-                y_batch = torch.tensor(y_batch, dtype=torch.float32)
-                output = self.forward(X_batch)
-                loss = criterion(output, y_batch)
-                loss.backward()
-                optimizer.step()
-
-                totalLoss += loss.item()
-                numLosses += 1
-
-
-            totalLoss /= numLosses
-            numLosses = 0
-            print(f'Epoch {epoch} loss: {totalLoss}')
-
-    def test(self, X, y, graph=False):
-        outputs = []
-        for i in range(len(X)):
-            output = self.forward(torch.stack([X[i]]))
-            outputs.append(output.item())
-
-        # plot actual vs predicted
-        if graph:
-            sns.scatterplot(x=range(len(X)), y=[outputs[i] for i in range(len(X))], label='Predicted')
-            sns.scatterplot(x=range(len(X)), y=[y[i][0] for i in range(len(X))], label='Actual')
-            plt.show()
-
-
-    def predict(self, X):
-        torch.set_grad_enabled(False)
-        retVal = []
-        X = torch.stack([X])
-        for i in range(len(X)):
-            retVal.append(self.forward(X[i]).item())
-
-        return retVal
-
-    def save(self, fileName):
-        torch.save(self, fileName)
-
-        # dump the parameters to a file
-        with open(f'{fileName}.params', 'w') as file:
-            for param in self.parameters():
-                file.write(str(param.data))
-                file.write('\n')
-
-    def saveToOnnx(self, fileName):
-        dummy_input = torch.randn(1, INPUT_SIZE)
-        torch.onnx.export(self, dummy_input, fileName, verbose=True, input_names=['input'], output_names=['output'])
-
-    def load(self, fileName):
-        return torch.load(fileName)
     
 # Takes a list of models and a tensor and returns the prediction
 def sentToModel(models, X):
@@ -134,6 +51,26 @@ def segmentData(X, y):
     Xy1, Xy2, Xy3, Xy4 = [], [], [], []
     for i in range(0, len(X)):
         match torch.sum(X[i][0:INPUT_SIZE - 1]).item() // 6:
+            case 4 | 3:
+                Xy1.append((X[i], y[i]))
+            case 2:
+                Xy2.append((X[i], y[i]))
+            case 1:
+                Xy3.append((X[i], y[i]))
+            case 0:
+                Xy4.append((X[i], y[i]))
+            case _:
+                print('Error: Invalid number of pieces')
+
+    return Xy1, Xy2, Xy3, Xy4
+
+def segmentDataBitBoard(X, y):
+    # Sort the data by the number of pieces
+    X, y = zip(*sorted(zip(X, y), key=lambda x: sum([subboard.bit_count() for subboard in x[0]])))
+    # Segment the data into 4 groups depending on the number of pieces
+    Xy1, Xy2, Xy3, Xy4 = [], [], [], []
+    for i in range(0, len(X)):
+        match sum([subboard.bit_count() for subboard in X[i]]) // 6:
             case 4 | 3:
                 Xy1.append((X[i], y[i]))
             case 2:
@@ -185,6 +122,26 @@ def get11manBoards():
     boards_with_moves = [list(map(list, board)) for board in boards_with_moves]
 
     return boards_with_moves
+
+# Convert every game state to a bitboard and return the list of bitboards
+# and a list of the outcomes
+def convertToBitboard(X, y, startPositions):
+    X_bitboards = []
+    y_extended = []
+    for gameIndex in range(len(X)):
+        board = deepcopy(startPositions[gameIndex])
+        player = 1
+        for move in X[gameIndex]:
+            # update the board
+            jump = bo.update_board(move[0], move[1], board)
+            if jump == True and bo.check_jump_required(board, player, move[1]):
+                continue
+            player = player ^ 3
+
+            X_bitboards.append(bc.convert_to_bitboard(board))
+            y_extended.append(y[gameIndex])
+
+    return X_bitboards, y_extended
 
 # Transforms the data from game outcome pairs, to position outcome pairs
 # Format of return: ([X's], [y's])
@@ -261,6 +218,9 @@ def augmentData(X, y, startingPositions):
 
 # Load the pdns found in the file and construct the training data
 # Format of return: [([X's]), ([y's], [startingPositions])]
+# X is a list of games where each game is a list of moves where each move is a pair of tuples (start, end) where start and end are (x, y) coordinates
+# y is a list of the winner of the game where 1 is player 1, 2 is player 2, and 0 is a tie
+# startingPositions is a list of the starting positions of each game
 def loadGames(fileName):
     X = []
     y = []
@@ -268,8 +228,7 @@ def loadGames(fileName):
     with open(fileName, 'r') as file:
         for line in file:
             moves = line.split(',')
-            startPosition, moves, winner = moves[0:1], moves[1:-1], moves[-1]
-            startPosition = startPosition[0]
+            startPosition, moves, winner = moves[0], moves[1:-1], moves[-1]
 
             board = [[0 for i in range(8)] for j in range(8)]
             for i in range(len(startPosition)):
@@ -373,16 +332,7 @@ def adjudicateGame(board):
 
     return -1
 
-def main():
-    # Play a game
-    # games = get11manBoards()
-    # results = playGames(games)
-    # saveGames('gamesNew.txt', results)
-    # quit()
-
-    # Load the games
-    X, y, startPositions = loadGames('gamesNew.txt')
-
+def trainNN(X, y, startPositions):
     # Convert the games to a tensor
     X, y = convertToTensor(X, y, startPositions)
 
@@ -392,15 +342,14 @@ def main():
 
     X_train = X[:int(len(X) * 0.8)]
     y_train = y[:int(len(y) * 0.8)]
-
-
-    # Train the models
+    
+    # Train the NN 
     models = []
     Xy1, Xy2, Xy3, Xy4 = segmentData(X_train, y_train)
     for i, segment in enumerate([Xy1, Xy2, Xy3, Xy4]):
         print(f'Training model {i}')
         shuffle(segment)
-        model = Net()
+        model = nn.Net()
         X, y = zip(*segment)
         model.trainModel(X, y)
         models.append(model)
@@ -416,7 +365,6 @@ def main():
     # Save the models
     for i in range(len(models)):
         models[i].save(f'model{i}')
-
 
     # Test the model by evaluating a won 4 vs 3 game
     testBoard = [[0, 4, 0, 4, 0, 4, 0, 0],
@@ -451,15 +399,54 @@ def main():
     result = sentToModel(models, tensor)
     print(f"Eval if player 2 to play: {int((result[0] - 0.5) * 1000)}")
 
-    # Save the models to onnx
-    for i in range(len(models)):
-        models[i].saveToOnnx(f'model{i}.onnx')
 
-    # test the model by loading it and using it
-    import onnx
-    onnx_model = onnx.load("model2.onnx")
-    onnx.checker.check_model(onnx_model)
+def trainLinReg(X, y, startPositions):
+    # Convert the games to bit boards
+    X, y = convertToBitboard(X, y, startPositions)
 
+    # slice off the last 20% of the data for testing
+    X_train = X[:int(len(X) * 0.8)]
+    y_train = y[:int(len(y) * 0.8)]
+    X_test = X[int(len(X) * 0.8):]
+    y_test = y[int(len(y) * 0.8):]
+
+    # segment the data
+    Xy1, Xy2, Xy3, Xy4 = segmentDataBitBoard(X_train, y_train)
+
+
+    # Train the Linear Regression model
+    models = []
+    for i, segment in enumerate([Xy1, Xy2, Xy3, Xy4]):
+        print(f'Training model {i}')
+        shuffle(segment)
+        model = lr.LinearRegressionModel()
+        X, y = zip(*segment)
+        model.train_model(X, y)
+        models.append(model)
+    
+    # Test the model
+    Xy1, Xy2, Xy3, Xy4 = segmentDataBitBoard(X_test, y_test)
+    for i, segment  in enumerate([Xy1, Xy2, Xy3, Xy4]):
+        model = models[i]
+        sortedData = sorted(segment, key=lambda x: x[1])
+        X, y = zip(*sortedData)
+        model.test(X, y, graph=True)
+
+def main():
+    # Play a game
+    # games = get11manBoards()
+    # results = playGames(games)
+    # saveGames('gamesNew.txt', results)
+    # quit()
+
+    # Load the games
+    Xs, ys, startPositions = loadGames('gamesNew.txt')
+
+    # train the neural network
+    #trainNN(Xs, ys, startPositions)
+
+    # train the linear regression model
+    trainLinReg(Xs, ys, startPositions)
 
 if __name__ == '__main__':
     main()

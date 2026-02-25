@@ -61,8 +61,8 @@ def main(args) -> None:
     player = 1
     board = Board()
     game_history = []
-    p_time = 0.1
-    ply = 100
+    p_time = 1
+    ply = 50
 
     engine_new_wins = 0
     engine_old_wins = 0

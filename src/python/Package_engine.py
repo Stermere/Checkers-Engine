@@ -7,7 +7,7 @@ def main():
         description="Python interface for searching a given checkers board",
         author="Collin Kees",
         author_email="Collin@kees.net",
-        ext_modules=[Extension("search_engine", ["src/engine/board_search.c"])]
+        ext_modules=[Extension("search_engine", ["src/engine/board_search.c"], extra_compile_args=["/D", "PYTHON"])]
     )
 
 if __name__ == "__main__":

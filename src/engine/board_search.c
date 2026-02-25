@@ -2,10 +2,10 @@
 // language: C
 // Description: this program serves as the C library for move generation and evaluation of checkers boards
 
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <math.h>
 #include "board_eval.c" // includes set, transposition table, and board evaler
 
@@ -17,10 +17,13 @@
 #define min(a,b) (((a)<(b))?(a):(b))
 #define max(a,b) (((a)>(b))?(a):(b))
 #define PRINT_OUTPUT 1
+#define TERMINATE_EARLY_THRESHOLD 20
 
 
+#ifdef PYTHON
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#endif
 
 
 // Define some functions TODO use a header file for this
@@ -58,6 +61,7 @@ struct search_info {
 };
 
 // Python comunication code 
+#ifdef PYTHON
 
 // Python function to search the board
 static PyObject* search_position(PyObject *self, PyObject *args){
@@ -114,10 +118,9 @@ PyInit_search_engine(void){
     return PyModule_Create(&search_engine);
 }
 
-
+#endif
 // End of python comunication code
 
-// Start of main code search code
 
 // a function to round the float to 2 decimal places
 float round_float(float num){
@@ -653,6 +656,11 @@ int negmax(long long* p1, long long* p2, long long* p1k, long long* p2k, int pla
         undo_board_update(p1, p2, p1k, p2k, move_start, move_end, jumped_piece_type, initial_piece_type);
         remove_draw_entry(evaler->draw_table, next_hash);
 
+        // store results of moves from the root node
+        if (depth_abs == 0) {
+            evaler->search_results->evals[i] = eval;
+        }
+
         // if the eval is infinity the search is trying to end so return
         if (eval == INFINITY || eval == -INFINITY){
             return INFINITY;
@@ -673,6 +681,9 @@ int negmax(long long* p1, long long* p2, long long* p1k, long long* p2k, int pla
         }
     }
 
+    if (depth_abs == 0) {
+        evaler->search_results->num_moves = num_moves;
+    }
     // if alpha and beta have improved then this is a PV node
     char node_type;
     if (board_eval <= alpha_orig){
@@ -746,6 +757,19 @@ int MTDF(long long* p1, long long* p2, long long* p1k, long long* p2k, int playe
     return g;
 }
 
+int only_viable_move(struct search_results* search_results) {
+    int m = -9999;
+    for (int i = 0; i < search_results->num_moves; i++) {
+        m = max(m, search_results->evals[i]);
+    }
+
+    int moves_near_m = 0;
+    for (int i = 0; i < search_results->num_moves; i++) {
+        moves_near_m += (search_results->evals[i] >= (m - TERMINATE_EARLY_THRESHOLD));
+    }
+
+    return moves_near_m <= 1;
+}
 
 
 // prepare needed memory for a search and call the search function to find the best move and return a pointer to the memory 
@@ -818,6 +842,11 @@ struct search_info* start_board_search(long long p1, long long p2, long long p1k
         else if (generate_all_moves(p1, p2, p1k, p2k, player, &moves[0], piece_loc, evaler->piece_offsets, &jump) == 1){
             terminate = 1;
         }
+
+        // If there has only been one viable move for the last 4 ply terminate the search
+        if (i > 8 && only_viable_move(evaler->search_results)) {
+            terminate = 1;
+        }  
     }
 
     // get the table entry for the best move and eval
@@ -857,6 +886,7 @@ void end_board_search(struct board_evaler* evaler){
     free(evaler->killer_table->table);
     free(evaler->killer_table);
     free(evaler->piece_offsets);
+    free(evaler->search_results);
     free_draw_table(evaler->draw_table);
     free(evaler);
 }
@@ -959,58 +989,57 @@ void print_line(long long p1, long long p2, long long p1k, long long p2k, unsign
     //human_readble_board(p1, p2, p1k, p2k);
 }
 
-
 // main function
 // runs a n_ply search to verify the move generation is working as expected
 // also benchmarks the time it takes to generate the moves
-int main(){
+// int main(){
 
-    printf("beginning tests\n");
+//     printf("beginning tests\n");
 
-    // setup initial board and search structures
-    // starting bit values
-    long long p1 = 6172839697753047040;
-    long long p2 = 11163050;
-    long long p1k = 0;
-    long long p2k = 0;
+//     // setup initial board and search structures
+//     // starting bit values
+//     long long p1 = 6172839697753047040;
+//     long long p2 = 11163050;
+//     long long p1k = 0;
+//     long long p2k = 0;
 
-    // end game player 2 winning endgame
-    //long long p1 = 5838922414443986944;
-    //long long p2 = 8409224;
-    //long long p1k = 0;
-    //long long p2k = 288230376154333184;
+//     // end game player 2 winning endgame
+//     //long long p1 = 5838922414443986944;
+//     //long long p2 = 8409224;
+//     //long long p1k = 0;
+//     //long long p2k = 288230376154333184;
 
 
-    int player = 1;
+//     int player = 1;
 
-    struct set* piece_loc = get_piece_locations(p1, p2, p1k, p2k);
+//     struct set* piece_loc = get_piece_locations(p1, p2, p1k, p2k);
 
-    int* offsets = malloc(sizeof(int) * 64 * 4);
-    compute_offsets(offsets);
+//     int* offsets = malloc(sizeof(int) * 64 * 4);
+//     compute_offsets(offsets);
 
-    int depth = 9;
+//     int depth = 9;
 
-    clock_t start, end;
-    double cpu_time_used;
+//     clock_t start, end;
+//     double cpu_time_used;
 
-    for (int i = 2; i < depth; i++){
-        // get the start time
-        start = clock();
+//     for (int i = 2; i < depth; i++){
+//         // get the start time
+//         start = clock();
 
-        long long n_ply_search_result = n_ply_search(&p1, &p2, &p1k, &p2k, player, piece_loc, offsets, i);
+//         long long n_ply_search_result = n_ply_search(&p1, &p2, &p1k, &p2k, player, piece_loc, offsets, i);
 
-        // get the end time
-        end = clock();
-        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+//         // get the end time
+//         end = clock();
+//         cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
 
-        // print the results
-        printf("%d ply search result: %lld\n", i, n_ply_search_result);
-        printf("%d ply search time: %f\n\n", i, cpu_time_used);
+//         // print the results
+//         printf("%d ply search result: %lld\n", i, n_ply_search_result);
+//         printf("%d ply search time: %f\n\n", i, cpu_time_used);
 
-    }
+//     }
 
-    // now do a search to depth 20 and print the results
-    start_board_search(p1, p2, p1k, p2k, player, 10, 40);
+//     // now do a search to depth 20 and print the results
+//     start_board_search(p1, p2, p1k, p2k, player, 10, 40);
 
-    return 0;
-}
+//     return 0;
+// }

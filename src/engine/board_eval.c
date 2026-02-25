@@ -1,6 +1,7 @@
 // Author: Collin Kees
 // board evaluation and hashing functions
 
+#include <time.h>
 #include <stdlib.h>
 #include "set.c"
 #include "hash_table.c"
@@ -37,6 +38,7 @@ struct board_evaler{
     struct hash_table* hash_table;
     struct draw_table* draw_table;
     struct killer_table* killer_table;
+    struct search_results* search_results;
     int* dist_arr;
     char* piece_offsets;
     clock_t start_time;
@@ -46,7 +48,11 @@ struct board_evaler{
     long long int nodes;
     long long int avg_depth;
     int extended_depth;
+};
 
+struct search_results {
+    int num_moves;
+    int evals[96];
 };
 
 struct board_evaler* board_evaler_constructor(long long p1_piece_loc, long long p2_piece_loc, int search_depth, double time_limit, clock_t start_time){
@@ -66,6 +72,7 @@ struct board_evaler* board_evaler_constructor(long long p1_piece_loc, long long 
     evaler->killer_table = init_killer_table(search_depth);
     evaler->dist_arr = init_distance_table();
     evaler->piece_offsets = compute_offsets();
+    evaler->search_results = malloc(sizeof(struct search_results));
     evaler->start_time = start_time;
     evaler->time_limit = time_limit;
     evaler->extended_depth = 0;
