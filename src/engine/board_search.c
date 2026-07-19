@@ -105,16 +105,26 @@ static PyMethodDef c_board_search_methods[] = {
 };
 
 // Define the module
+// When compiled with /D OLD_ENGINE the extension is exposed as "search_engine_old"
+// so that both the current and a reference build can coexist in the same Python process.
+#ifdef OLD_ENGINE
+  #define _MODULE_NAME  "search_engine_old"
+  #define _PYINIT_FUNC  PyInit_search_engine_old
+#else
+  #define _MODULE_NAME  "search_engine"
+  #define _PYINIT_FUNC  PyInit_search_engine
+#endif
+
 static struct PyModuleDef search_engine = {
     PyModuleDef_HEAD_INIT,
-    "search_engine",
+    _MODULE_NAME,
     "C board search logic",
     -1,
     c_board_search_methods
 };
 
 PyMODINIT_FUNC
-PyInit_search_engine(void){
+_PYINIT_FUNC(void){
     return PyModule_Create(&search_engine);
 }
 
