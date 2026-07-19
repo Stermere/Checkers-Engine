@@ -10,3 +10,11 @@ settings.json
 tasks.json
 .vscode
 
+# neural net training artifacts (regenerate with src/python/nnue)
+src/python/nnue/data/
+src/python/nnue/models/
+src/python/nnue/nnue_weights.h
+
+
+# endgame db
+db/

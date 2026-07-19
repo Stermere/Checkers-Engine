@@ -18,8 +18,8 @@ struct killer_table {
 // initialize the killer table
 struct killer_table* init_killer_table(int max_depth){
     struct killer_table* table = (struct killer_table*)malloc(sizeof(struct killer_table));
-    table->size = max_depth * 4 + 30; // add 100 to ensure extenstions cause no issues
-    table->table = (struct killer_entry*)malloc(sizeof(struct killer_entry) * table->size);
+    table->size = max_depth * 4 + 30; // oversized so extensions cause no issues
+    table->table = (struct killer_entry*)calloc(table->size, sizeof(struct killer_entry));
     return table;
 }
 

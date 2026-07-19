@@ -13,26 +13,30 @@
 #define NO_MOVE 0 // no move was found
 
 #define MT_STATE_SIZE 624
-#define NUMBER_OF_BUCKETS 2
+#define NUMBER_OF_BUCKETS 4
+
+// zobrist key layout: [0..255] piece-square keys (4 piece types x 64 squares),
+// [256..319] forced-continuation-square keys (mid multi-jump state),
+// [320] side-to-move key (xor'ed in when player 2 is to move)
+#define ZOBRIST_KEYS 321
+#define FORCED_KEY_OFFSET 256
+#define SIDE_KEY_INDEX 320
 
 
 // define functions
 struct hash_table_entry;
 struct hash_table;
 unsigned long long int* compute_piece_hash_diffs();
-long long int rand_num();
-struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned long long int hash, int age, int depth);
+struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned long long int hash);
 struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long long int hash, int age, int depth);
-struct hash_table_entry* check_for_empty_spot(struct hash_table *table, unsigned long long int hash);
-int check_for_entry(struct hash_table_entry *table, unsigned long long int hash);
 
 // stores the data related to the hashed value
 // ie. the hash, its evaluation, what is the type of fail (fail high or fail low, or true value), the best move, etc.
 struct hash_table_entry {
     unsigned long long int hash;
     int eval;
-    char depth; 
-    char age;
+    signed char depth;
+    unsigned char age;
     char player;
     // moves are stored in a format of: top byte is the start square, bottom byte is the end square
     short best_move;
@@ -48,8 +52,13 @@ struct hash_table {
     long long int hit_count;
     long long int miss_count;
     int pv_retrival_count;
+    unsigned char age;
     unsigned long long int* piece_hash_diff;
 };
+
+// the transposition table persists for the lifetime of the process so knowledge
+// carries over from move to move (zobrist keys use a fixed seed so hashes stay valid)
+static struct hash_table* GLOBAL_HASH_TABLE = NULL;
 
 // Define the structure for the Mersenne Twister rng
 struct mt_state {
@@ -90,8 +99,16 @@ unsigned long long mt_rand(struct mt_state *state) {
     return y;
 }
 
-// initializes the hash table
+// initializes the hash table (or reuses the persistent one, bumping its age)
 struct hash_table* init_hash_table(long long int size){
+    if (GLOBAL_HASH_TABLE != NULL){
+        GLOBAL_HASH_TABLE->age++;
+        GLOBAL_HASH_TABLE->hit_count = 1;
+        GLOBAL_HASH_TABLE->miss_count = 1;
+        GLOBAL_HASH_TABLE->pv_retrival_count = 0;
+        return GLOBAL_HASH_TABLE;
+    }
+
     struct hash_table *table = (struct hash_table*)malloc(sizeof(struct hash_table));
     table->table = (struct hash_table_entry*)calloc(size, sizeof(struct hash_table_entry));
     // check for allocation failiure and exit if it does
@@ -100,13 +117,16 @@ struct hash_table* init_hash_table(long long int size){
         exit(1);
     }
 
-    table->size = (size - (size % 4)) / 4; // 4 buckets per hash value
+    table->size = size / NUMBER_OF_BUCKETS;
     table->total_size = size;
     table->piece_hash_diff = compute_piece_hash_diffs();
     table->num_entries = 1;
     table->hit_count = 1;
     table->miss_count = 1;
+    table->pv_retrival_count = 0;
+    table->age = 0;
 
+    GLOBAL_HASH_TABLE = table;
     return table;
 }
 
@@ -114,36 +134,31 @@ struct hash_table* init_hash_table(long long int size){
 void add_hash_entry(struct hash_table *table, unsigned long long int hash, int eval, int depth, int age, int player,
                     short best_move, char node_type){
 
-    // get the entry and incriment the number of entries
-    struct hash_table_entry* entry_index = get_storage_index(table, hash, age, depth);
-
-    if (entry_index == NULL) {
+    struct hash_table_entry* entry = get_storage_index(table, hash);
+    if (entry == NULL) {
         return;
     }
 
-    // check if the entry is empty
-    if (!check_for_entry(entry_index, hash)) {
-        table->num_entries++;
+    if (entry->hash == hash) {
+        // same position: keep a deeper entry from this search unless the new one is exact
+        int stale = (entry->age != table->age);
+        entry->age = table->age;
+        if (!stale && entry->depth > depth && node_type != PV_NODE) {
+            return;
+        }
+    } else {
+        if (entry->hash == 0llu) {
+            table->num_entries++;
+        }
     }
 
-    if (entry_index->hash == hash && entry_index->depth > depth) {
-        return;
-    }
-    
-    entry_index->depth = depth;
-    entry_index->node_type = node_type;
-    entry_index->best_move = best_move;
-    entry_index->player = player;
-    entry_index->age = age; 
-    entry_index->hash = hash;
-    entry_index->eval = eval;
-
-}
-
-// check if there is a hash entry for the given hash
-// return 0 if there is no entry, 1 if there is an entry
-int check_for_entry(struct hash_table_entry* entry_index, unsigned long long int hash){
-    return entry_index->hash != 0llu;
+    entry->depth = (signed char)depth;
+    entry->node_type = node_type;
+    entry->best_move = best_move;
+    entry->player = (char)player;
+    entry->age = table->age;
+    entry->hash = hash;
+    entry->eval = eval;
 }
 
 // returns the entry for the given hash
@@ -167,63 +182,52 @@ struct hash_table_entry* get_hash_entry(struct hash_table *table, unsigned long 
     return NULL;
 }
 
-// returns the index of the hash table that will be replaced by the new entry
-// if there is an empty spot, returns the index of the empty spot
-struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned long long int hash, int age, int depth){
-    struct hash_table_entry* index = check_for_empty_spot(table, hash);
-    if (index != NULL){
-        return index;
-    }
+// returns the slot the new entry should be written to.
+// prefers (in order): the entry for this exact hash, an empty slot, then the
+// least valuable victim (older age first, then shallower depth, PV slightly protected)
+struct hash_table_entry* get_storage_index(struct hash_table *table, unsigned long long int hash){
+    struct hash_table_entry* base = table->table + ((hash % table->size) * NUMBER_OF_BUCKETS);
+    struct hash_table_entry* victim = NULL;
+    int victim_score = 1 << 30;
 
-    struct hash_table_entry* entry_index = table->table + ((hash % table->size) * NUMBER_OF_BUCKETS);
-    int min_depth = entry_index->depth;
     for (int i = 0; i < NUMBER_OF_BUCKETS; i++) {
-        if ((entry_index->age) <= age) {
-            return entry_index;
+        struct hash_table_entry* e = base + i;
+        if (e->hash == hash){
+            return e;
         }
 
-        if ((entry_index->depth < min_depth) && (entry_index->node_type != PV_NODE)){
-            index = entry_index;
-            min_depth = entry_index->depth;
+        int score;
+        if (e->hash == 0llu){
+            score = -(1 << 29);
+        } else {
+            int staleness = (unsigned char)(table->age - e->age);
+            score = (int)e->depth - 8 * staleness + ((e->node_type == PV_NODE) ? 4 : 0);
         }
-        entry_index++;
+
+        if (score < victim_score){
+            victim_score = score;
+            victim = e;
+        }
     }
 
-
-    return index;
+    return victim;
 }
 
-// checks if any of the spots for this hash value are empty
-// returns the index of the empty spot or a entry with the same hash if there is one, otherwise returns -1
-struct hash_table_entry* check_for_empty_spot(struct hash_table *table, unsigned long long int hash){
-    struct hash_table_entry* entry_index = table->table + ((hash % table->size) * NUMBER_OF_BUCKETS);
-    struct hash_table_entry* empty_spot = NULL;
-    for (int i = 0; i < NUMBER_OF_BUCKETS; i++) {
-        if (entry_index->hash == hash){
-            return entry_index;
-        }
-        else if (entry_index->hash == 0llu){
-            empty_spot = entry_index;
-        }
-        entry_index++;
-    }
-    return empty_spot;
-}
-
-// compute the hash of a board
+// compute the hash of a board (piece placement only; the caller xors in the
+// side-to-move key and any forced-continuation key)
 unsigned long long int get_hash(unsigned long long int p1, unsigned long long int p2, unsigned long long int p1k, unsigned long long int p2k, struct hash_table * table){
-    long long int hash = 0;
+    unsigned long long int hash = 0;
     for (int i = 0; i < 64; i++){
-        if (p1 & (1ll << i)){
+        if (p1 & (1ull << i)){
             hash = hash ^ table->piece_hash_diff[i];
         }
-        else if (p2 & (1ll << i)){
+        else if (p2 & (1ull << i)){
             hash = hash ^ table->piece_hash_diff[i + 64];
         }
-        else if (p1k & (1ll << i)){
+        else if (p1k & (1ull << i)){
             hash = hash ^ table->piece_hash_diff[i + 128];
         }
-        else if (p2k & (1ll << i)){
+        else if (p2k & (1ull << i)){
             hash = hash ^ table->piece_hash_diff[i + 192];
         }
     }
@@ -231,12 +235,12 @@ unsigned long long int get_hash(unsigned long long int p1, unsigned long long in
 }
 
 // compute the hash table piece diffs for quickly computing hashes of boards
+// uses a fixed seed so hashes are stable across searches and processes
 unsigned long long int* compute_piece_hash_diffs(){
-    srand(time(NULL));
     struct mt_state rng_state;
-    mt_init(&rng_state, time(NULL));
-    long long int* piece_hash_diffs = (long long int*)malloc(sizeof(long long int) * (64 * 4));
-    for (int i = 0; i < (64 * 4); i++){
+    mt_init(&rng_state, 0xC4CC5EEDC0FFEE01ull);
+    unsigned long long int* piece_hash_diffs = (unsigned long long int*)malloc(sizeof(unsigned long long int) * ZOBRIST_KEYS);
+    for (int i = 0; i < ZOBRIST_KEYS; i++){
         piece_hash_diffs[i] = mt_rand(&rng_state);
     }
     return piece_hash_diffs;
@@ -245,6 +249,6 @@ unsigned long long int* compute_piece_hash_diffs(){
 // frees the hash table
 void free_hash_table(struct hash_table *table){
     free(table->table);
+    free(table->piece_hash_diff);
     free(table);
 }
-

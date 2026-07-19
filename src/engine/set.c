@@ -7,9 +7,17 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
 
+// Keyed on the compiler, not the OS. The guard used to be `#ifdef _WIN64`, which
+// is true for mingw and clang-on-Windows as well - and there `_tzcnt_u64` is a
+// BMI1 intrinsic that fails to inline unless the target includes BMI1, so any
+// GCC-family build of this engine did not compile. __builtin_ctzll is the right
+// spelling for all of them and lowers to tzcnt/bsf just the same.
 static inline int countTrailingZeros(unsigned long long x) {
-#ifdef _WIN64
+#if defined(_MSC_VER)
     return (int)_tzcnt_u64(x);
 #else
     return __builtin_ctzll(x);

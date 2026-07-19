@@ -182,6 +182,7 @@ def play_game(start_board, start_player, p_time, ply_depth):
     history = []
     move_cap = 200  # hard ply cap to avoid runaway games
     moves_played = 0
+    forced = -1  # square of a piece mid multi-jump (new engine API only)
 
     while True:
         history.append(deepcopy(board.board))
@@ -190,16 +191,22 @@ def play_game(start_board, start_player, p_time, ply_depth):
 
         if player == 1:
             with _suppress_fd_output():
-                results = se.search_position(p1, p2, p1k, p2k, player, p_time, ply_depth)
+                results = se.search_position(p1, p2, p1k, p2k, player, p_time, ply_depth, forced)
         else:
+            # the reference build takes the same forced-continuation argument, and it
+            # has to be passed or the old engine is allowed to continue a multi jump
+            # with the wrong piece, which would make the comparison meaningless
             with _suppress_fd_output():
-                results = seo.search_position(p1, p2, p1k, p2k, player, p_time, ply_depth)
+                results = seo.search_position(p1, p2, p1k, p2k, player, p_time, ply_depth, forced)
+
 
         best_move = convert_bit_move(results[-2])
 
         turn = update_board(best_move[0], best_move[1], board.board)
         if turn and check_jump_required(board.board, player, best_move[1]):
+            forced = best_move[1][0] + best_move[1][1] * 8
             continue  # chain-jump: same player moves again
+        forced = -1
 
         moves_played += 1
         player = abs(player - 3)
