@@ -41,7 +41,15 @@ L2 = 16
 
 # The network output is a logit. Centipawns = logit * EVAL_SCALE, i.e. a
 # position the net scores at +1.0 logit is about a 73% win.
-EVAL_SCALE = 120.0
+#
+# 400 was tried and reverted (2026-08-01): it fits the recorded game outcomes
+# better and loses ~157 Elo, because the search is not scale free. Static evals
+# are clamped into +-EVAL_MAX (1500) and TERMINATE_EARLY_THRESHOLD is 20
+# absolute centipawns, so a wider scale saturates the eval in exactly the won
+# positions - exporting a 120-trained net at 324 clamped 70% of evaluations.
+# Rank any change to this by games; val_loss moves with the target and mae_cp
+# was not enough to catch it either.
+EVAL_SCALE = 120
 
 # Fixed point scales used by export.py. Activations are in [0,1] and are stored
 # as int16 in units of 1/QUANT_ACT. Weights are stored in units of 1/QUANT_W.

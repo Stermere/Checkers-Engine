@@ -18,3 +18,5 @@ src/python/nnue/nnue_weights.h
 
 # endgame db
 db/
+# candidate NNUE weights written by src/python/nnue/match_net.py
+src/engine/nnue_weights_candidate.h

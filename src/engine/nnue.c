@@ -87,7 +87,17 @@
 #include <string.h>
 #include <assert.h>
 
+// Build with /D NNUE_WEIGHTS_CANDIDATE=1 to link against
+// nnue_weights_candidate.h instead of the committed header. That file is
+// gitignored and is what src/python/nnue/match_net.py writes, so a search that
+// exports and plays hundreds of nets never touches the tracked champion
+// weights - the working tree stays clean and a killed run leaves nothing to
+// restore. Deploying a winner is then an explicit copy, not a side effect.
+#ifdef NNUE_WEIGHTS_CANDIDATE
+#include "nnue_weights_candidate.h"
+#else
 #include "nnue_weights.h"
+#endif
 
 #ifdef _MSC_VER
 #include <intrin.h>

@@ -132,15 +132,21 @@ def compare_to_checkpoint(q_header, ckpt):
 # ---------------------------------------------------------------------------
 # the reference forward pass, run on the header's weights
 # ---------------------------------------------------------------------------
-def int_forward(q, indices):
+def int_forward(q, indices, eval_scale):
     """export.int_forward, restated against header-parsed weights.
 
     Kept in sync with export.py by test 4 below being the thing that fails if it
     ever drifts; it is repeated here only so this script does not need torch.
+
+    `eval_scale` is a parameter and not a constant on purpose: it was hardcoded
+    at 120.0, which silently stopped being the trained value when model.py
+    recalibrated it to 400. On a machine without torch - the only way this copy
+    is ever reached - that made every evaluation come back at 30% of its true
+    magnitude, and the C would have been blamed for a difference that was
+    entirely this function's.
     """
     quant_act = 127
     quant_w = 64
-    eval_scale = 120.0
 
     ft_w = q['ft_w'].astype(np.int32)
     acc = ft_w[indices].sum(axis=1) + q['ft_b'].astype(np.int32)
@@ -221,7 +227,7 @@ def eval_many(engine, p1, p2, p1k, p2k, stm):
     return np.frombuffer(raw, dtype=np.int32)
 
 
-def check_eval(engine, q, boards, n, reference, chunk=100_000):
+def check_eval(engine, q, boards, n, reference, eval_scale, chunk=100_000):
     """The whole forward pass, C vs Python, on n real positions."""
     p1, p2, p1k, p2k, stm = boards
     total_bad = 0
@@ -230,7 +236,7 @@ def check_eval(engine, q, boards, n, reference, chunk=100_000):
     for start in range(0, n, chunk):
         sl = slice(start, min(start + chunk, n))
         idx = features.encode_indices(p1[sl], p2[sl], p1k[sl], p2k[sl], stm[sl])
-        want = reference(q, idx.astype(np.int64))
+        want = reference(q, idx.astype(np.int64), eval_scale)
 
 
         t0 = time.perf_counter()
@@ -344,7 +350,12 @@ def main():
     results.append(('encoder', check_encoder(engine, boards, min(args.encoder_n, n))))
 
     print("\n4. evaluation (C vs int_forward)")
-    results.append(('evaluation', check_eval(engine, q, boards, n, reference)))
+    # the header's scale, not model.py's: a net trained at an older calibration
+    # can still be the one deployed, and the reference has to be the function
+    # the engine was actually compiled from
+    eval_scale = float(defines['NNUE_EVAL_SCALE'].rstrip('f'))
+    results.append(('evaluation',
+                    check_eval(engine, q, boards, n, reference, eval_scale)))
 
 
     print("\n5. antisymmetry under colour-swapped mirror")

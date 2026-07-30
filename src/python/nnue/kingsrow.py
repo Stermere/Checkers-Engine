@@ -55,6 +55,7 @@ because the parallelism here comes from running many processes.
     kr = Kingsrow(seconds=0.05)
     cp = kr.eval(board, player)     # side-to-move relative centipawns
     cp, squares, is_capture = kr.bestmove(board, player)    # ...and its move
+    squares, is_capture, src = kr.playmove(board, player)   # a move every ply
 """
 
 import ctypes as C
@@ -85,6 +86,10 @@ _VALUE_RE = re.compile(r'value\s*[:=]?\s*([+-]?\d+)', re.I)
 #: the PV, of which only the first token is a move we can trust to be legal in
 #: the position we asked about. `-` is a quiet move, `x` a capture.
 _PV_RE = re.compile(r'\bpv\s+(\d+(?:[-x]\d+)+)', re.I)
+#: the candidate list a database position gets instead of a value and a PV:
+#: `depth 6; 21-17* (0.250), 21-25 (1.000),`. Only `playmove` reads it; see
+#: there for what was probed about it and what is safe to conclude.
+_CAND_RE = re.compile(r'(\d+)([-x])(\d+)(\*?)\s*\(')
 
 #: our matrix values -> CheckerBoard pieces. Our p1 starts on row 7 and
 #: promotes on row 0, which is CheckerBoard's WHITE; our playable squares are
@@ -113,6 +118,20 @@ def _bit_to_square(bit):
 #: rotation or a transposed axis.
 BIT_TO_SQUARE = {b: _bit_to_square(b) for b in range(64) if (b % 8 + b // 8) % 2}
 SQUARE_TO_BIT = {n: b for b, n in BIT_TO_SQUARE.items()}
+
+
+def _squares(token):
+    """`21-17` or `6x29` -> our bit indices, or None if a number is not a square.
+
+    A capture token may be *compressed*, with the intermediate landing squares
+    left out, so the result can be two squares for a chain of several hops. The
+    caller reconstructs those against a move generator; this module knows
+    nothing about our board rules.
+    """
+    nums = [int(s) for s in re.findall(r'\d+', token)]
+    if any(n not in SQUARE_TO_BIT for n in nums):
+        return None
+    return tuple(SQUARE_TO_BIT[n] for n in nums)
 
 
 class Kingsrow:
@@ -231,11 +250,53 @@ class Kingsrow:
         m = _PV_RE.search(status)
         if m is None:
             return cp, None, False
-        token = m.group(1)
-        squares = [int(s) for s in re.findall(r'\d+', token)]
-        if any(s not in SQUARE_TO_BIT for s in squares):
+        squares = _squares(m.group(1))
+        if squares is None:
             return cp, None, False
-        return cp, tuple(SQUARE_TO_BIT[s] for s in squares), 'x' in token
+        return cp, squares, 'x' in m.group(1)
+
+    def playmove(self, board, player, seconds=None):
+        """`(squares, is_capture, source)`: the move to play here, one search.
+
+        `bestmove` is the entry point when the score is what you want, and it
+        deliberately names no move on a position Kingsrow answers out of its
+        endgame databases. This one is for actually *playing* Kingsrow, where
+        that ply still has to produce a move and it must be Kingsrow's own -
+        handing those plies to another engine would no longer be a match
+        against Kingsrow.
+
+        A database position gets a candidate list in place of a value and a PV:
+
+            depth 6; 19-16* (0.394), 5-9* (0.417), 5-1* (0.417), 19-15 (0.608),
+
+        Probed over 200 such positions (all of them drawn - a decisive database
+        position comes back with an ordinary PV, so this path only ever chooses
+        between moves that hold the same result): the list is sorted ascending
+        by the parenthesised number, the starred moves are always a prefix of
+        it, and the first starred move was legal on our board 200 times out of
+        200. What the number counts is undocumented and is not needed here - the
+        star is Kingsrow's own mark for the moves it rates best, so this takes
+        the first of them.
+
+        `squares` is None, with `source` None, only when neither reading
+        produced a move; `source` is 'pv' or 'db' otherwise. As in `bestmove`,
+        a capture may be compressed and is the caller's to reconstruct.
+        """
+        _value, status = self.search(board, player, seconds)
+
+        m = _PV_RE.search(status)
+        if m is not None:
+            squares = _squares(m.group(1))
+            if squares is not None:
+                return squares, 'x' in m.group(1), 'pv'
+
+        for frm, sep, to, star in _CAND_RE.findall(status):
+            if not star:
+                break           # the stars are a prefix; past them is worse
+            squares = _squares(f"{frm}{sep}{to}")
+            if squares is not None:
+                return squares, sep == 'x', 'db'
+        return None, False, None
 
 
 if __name__ == '__main__':
@@ -274,10 +335,15 @@ if __name__ == '__main__':
 
     # ---- the square mapping, checked against Kingsrow itself ----
     # A wrong rotation or a transposed axis does not make the labels subtly
-    # worse, it makes `bestmove()` name a square with nothing on it. With one
+    # worse, it makes the parsed move name a square with nothing on it. With one
     # king of ours on the board and one of theirs far away, the only move
     # Kingsrow can name is our king's, so the square it prints must be the
     # square we put it on.
+    #
+    # Through `playmove` rather than `bestmove`, because two kings is deep
+    # inside Kingsrow's endgame databases and a database position is answered
+    # with a candidate list and no PV - which is exactly the reading `bestmove`
+    # declines to make. It is the same square mapping either way.
     print("\n  square mapping (a lone king on each of the 32 squares):")
     playable = [b for b in range(64) if (b % 8 + b // 8) % 2]
     bad = []
@@ -288,7 +354,7 @@ if __name__ == '__main__':
             if abs(other % 8 - bit % 8) > 3 or abs(other // 8 - bit // 8) > 3:
                 probe[other // 8][other % 8] = 4
                 break
-        _cp, squares, _cap = kr.bestmove(probe, 1, seconds=0.02)
+        squares, _cap, _src = kr.playmove(probe, 1, seconds=0.02)
         if squares is None or squares[0] != bit:
             bad.append((bit, None if squares is None else squares[0]))
     if bad:

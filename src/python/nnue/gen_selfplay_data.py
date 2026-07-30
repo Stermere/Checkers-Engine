@@ -39,6 +39,43 @@ against 45. Expect roughly 4x the positions per game, with a tail of drawn
 manoeuvring in it, and read positions/game off the first progress lines rather
 than sizing `--games` from a `self` run.
 
+`--our-side` turns the run into a *match*: our engine plays one colour and
+Kingsrow the other, and Kingsrow still labels every position on both sides. A
+pure Kingsrow run only ever visits positions Kingsrow's own play reaches, which
+are by construction the positions our eval is least likely to be wrong about -
+nobody reaches our engine's blunders except our engine. Playing the match puts
+the games back on our own distribution while keeping the strong labels, so the
+data lands exactly where the eval is failing. Retraining on it and re-running
+the match is the loop this flag exists for; each round moves the distribution
+onto the new net's mistakes.
+
+It costs about half again as much per game. On our plies Kingsrow's move is not
+wanted but its opinion is, so those plies run two searches (ours to move, its to
+label) - the arrangement `--teacher kingsrow` was written to avoid. That search
+is skipped on plies the filters would discard anyway, which is why `want` is
+computed before the move and not after it. `--depth` and `--seconds` stop being
+near-dead settings here and become our engine's actual playing strength, so they
+decide what the mistakes in the data look like.
+
+Two things change about the data, both deliberate:
+
+  * **No game outcomes are recorded** (`result_n` is 0 on every row, which
+    `train.py` reads as "use the search score alone"). In a match between
+    engines of very different strength the result is decided by which engine is
+    to move, not by the position: our side loses nearly every game from
+    positions Kingsrow's own label calls equal. Blending that in with `--lambda`
+    would teach the net that equal positions are lost. The endings histogram is
+    still printed, so the match score is not lost, it is just not written into
+    the labels.
+  * **`--eps` applies to our plies only.** A random move from Kingsrow is a gift
+    our engine may fail to punish, and the point of the match is to be punished.
+    Our own random moves still branch the games apart, which is what `--eps` was
+    for.
+
+`--our-side alternate` splits the games between the two colours, which is worth
+preferring over a fixed side unless you are chasing something colour-specific:
+half the data otherwise comes from positions where our engine is never on move.
+
 What gets thrown away, and why - the filters matter more than the volume:
 
   * **Positions with a capture available.** A static eval of a position in the
@@ -96,6 +133,9 @@ Run:
     python src/python/nnue/gen_selfplay_data.py --games 200 --workers 8
     python src/python/nnue/gen_selfplay_data.py --games 40000 --workers 14 \
         --seeds pdn --shard-size 250000 --out data/selfplay_3m.npz
+    python src/python/nnue/gen_selfplay_data.py --games 20000 --workers 14 \
+        --teacher kingsrow --our-side alternate --depth 9 --seconds 1.0 \
+        --out data/match_kr.npz
 """
 
 import argparse
@@ -145,8 +185,13 @@ def _kingsrow(seconds):
 #: Kingsrow run, and be a self-play run. `ending` is the same idea for outcome
 #: labels: a run where every game hit the piece floor would produce a file with
 #: no outcomes in it and look no different from one that had them.
+#:
+#: `our_moves` is separate from `fallbacks` because under `--our-side` our
+#: engine moves by design rather than because Kingsrow declined to: folding the
+#: two together would make the fallback rate - the one number that says a
+#: Kingsrow run really was played by Kingsrow - unreadable.
 GameResult = namedtuple('GameResult',
-                        'samples plies teacher_moves fallbacks ending')
+                        'samples plies teacher_moves fallbacks our_moves ending')
 
 # How a game finished, which decides the outcome label on every position in it.
 # 'win' and 'tie' are resolved on the board. 'cap' is a game still going at
@@ -308,6 +353,18 @@ def _resolve_from_db(p1, p2, p1k, p2k, player, ei):
     return 0, False
 
 
+def resolve_our_side(setting, seed):
+    """Which player our own engine plays this game: 1, 2, or 0 for neither.
+
+    `alternate` is decided off the game's own seed rather than a counter, so it
+    stays fixed per game index and a resumed run keeps assigning the same colour
+    to the games it has yet to play.
+    """
+    if setting == 'alternate':
+        return 1 + seed % 2
+    return 0 if setting == 'none' else int(setting)
+
+
 def play_one_game(args):
     """Play a game and return the labelled positions from it, as a GameResult.
 
@@ -321,18 +378,22 @@ def play_one_game(args):
     with the side to move recorded and the result is filled in at the end.
     """
     (board, start_player, seed, seconds, depth, skip_plies, random_plies, eps,
-     min_pieces, move_cap, teacher, teacher_seconds) = args
+     min_pieces, move_cap, teacher, teacher_seconds, our_side) = args
 
     # imported here so the module is loaded once per worker, not at pickle time
     import engine_iface as ei
 
     rng = random.Random(seed)
     kr = _kingsrow(teacher_seconds) if teacher == 'kingsrow' else None
+    # 0 unless this is a match: the colour our own engine plays, with Kingsrow
+    # on the other one. main() refuses --our-side without --teacher kingsrow,
+    # so `kr` is never None where this is non-zero.
+    our_side = resolve_our_side(our_side, seed)
     player = start_player
     history = []
     samples = []
     ply = 0
-    teacher_moves = fallbacks = 0
+    teacher_moves = fallbacks = our_moves = 0
     winner, ending = 0, 'cap'      # 'cap' is what survives if the loop runs out
 
     while ply < move_cap:
@@ -347,24 +408,40 @@ def play_one_game(args):
 
         # ---- pick the move, and take the label off the same search ----
         label, hops = None, None
-        if kr is not None:
+        if kr is not None and player != our_side:
             hops, label = _kingsrow_move(board, player, kr)
             if hops is None:
                 fallbacks += 1
             else:
                 teacher_moves += 1
+        elif kr is not None and want:
+            # a match ply of ours. Kingsrow's *move* is not wanted here, but its
+            # opinion of the position still is - it is the only trustworthy
+            # label available - so this ply pays for a second search. Only when
+            # the position survives the filters: `want` is computed above so
+            # that a position about to be discarded costs nothing extra.
+            label = kr.eval(board, player)
         if hops is None:
-            # our engine: the teacher under --teacher self, and the fallback for
-            # the odd position Kingsrow names no move for
+            # our engine: the teacher under --teacher self, our side of a match
+            # under --our-side, and the fallback for the odd position Kingsrow
+            # names no move for
             hops, own_eval = _engine_move(board, player, ei, seconds, depth)
             if kr is None:
                 label = own_eval
+            elif player == our_side:
+                our_moves += 1
         if not hops:
             # nothing legal for the side to move, so it has lost
             winner, ending = player ^ 3, 'win'
             break
 
-        if eps > 0.0 and rng.random() < eps:
+        # In a match the randomisation is ours alone: a random move from
+        # Kingsrow is a gift our engine may not punish, and being punished is
+        # the whole point. The side test is before the draw so that an ordinary
+        # run consumes `rng` exactly as it did before this flag existed, and
+        # resumes byte-identically.
+        if eps > 0.0 and (our_side == 0 or player == our_side) \
+                and rng.random() < eps:
             # a random legal move now and then, so games do not collapse onto
             # one deterministic line per starting position. The label still
             # stands - it describes this position, not the move played from it.
@@ -394,13 +471,21 @@ def play_one_game(args):
             break
 
     # ---- attach the outcome, from each position's own point of view ----
-    if winner == 0:            # 'tie', 'cap' adjudicated drawn, or a drawn floor
+    if our_side:
+        # A match between engines of very different strength decides its games
+        # on which engine is to move, not on the position: our side loses from
+        # positions Kingsrow's own label calls dead equal. Recording that would
+        # teach the net, through --lambda, that equal positions are lost, so the
+        # rows go out marked "no outcome known" and train on the label alone.
+        # The endings histogram still reports the match score.
+        result_for = lambda _stm: RES_UNKNOWN
+    elif winner == 0:          # 'tie', 'cap' adjudicated drawn, or a drawn floor
         result_for = lambda _stm: RES_DRAW
     else:
         result_for = lambda stm: RES_WIN if stm == winner else RES_LOSS
     samples = [s + (result_for(s[4]),) for s in samples]
 
-    return GameResult(samples, ply, teacher_moves, fallbacks, ending)
+    return GameResult(samples, ply, teacher_moves, fallbacks, our_moves, ending)
 
 
 # ---------------------------------------------------------------------------
@@ -497,14 +582,43 @@ def _ballot_seeds(n_games, rng, random_plies):
 #: exists" as a default, and the name keeps changing as the generator improves -
 #: `selfplay_1m.npz` was ballot-seeded and is retired. Naming one file in each
 #: script means every retirement silently breaks a gate somewhere.
-MIDGAME_DATASETS = ('selfplay_3m.npz', 'pdn_positions.npz', 'selfplay_2m.npz')
+MIDGAME_DATASETS = ('selfplay_large_kr.npz')
 
 
 def default_midgame_datasets():
-    """The midgame .npz files that are actually present, newest first."""
+    """The midgame .npz files that are actually present, largest first.
+
+    Discovered rather than listed. The hardcoded MIDGAME_DATASETS names below
+    went stale as the generators were re-run under new names, and because this
+    is only ever a *default* the staleness was silent: grid_search.py went on
+    working, just against the tablebase set alone, which is not a midgame search
+    at all. Anything carrying an `eval_cp` column is a midgame set by
+    definition, so ask the files.
+
+    `np.load` reads only the archive directory here - `.files` does not
+    decompress anything - so this stays cheap even over several GB of data.
+    """
+    import numpy as np
+
     data_dir = os.path.join(NNUE_DIR, 'data')
-    return [os.path.join(data_dir, n) for n in MIDGAME_DATASETS
-            if os.path.exists(os.path.join(data_dir, n))]
+    if not os.path.isdir(data_dir):
+        return []
+
+    found = []
+    for name in sorted(os.listdir(data_dir)):
+        if not name.endswith('.npz'):
+            continue
+        path = os.path.join(data_dir, name)
+        try:
+            with np.load(path) as d:
+                if 'eval_cp' in d.files:
+                    found.append((os.path.getsize(path), path))
+        except Exception:
+            continue                      # a partial or corrupt shard, not a set
+    # largest first: the blend weights are what set the mix, so the order only
+    # decides how a --weights list lines up, and "biggest set first" is the
+    # least surprising rule to remember
+    return [p for _size, p in sorted(found, reverse=True)]
 
 
 def _key_view(arr):
@@ -608,9 +722,9 @@ def write_dataset(arr, out_path, exclude=(), seed=0):
                   f"({m.mean():.1%})")
         print(f"  mean score for the side to move {result[known].mean():.3f}")
     if (~known).any():
-        print(f"  {(~known).sum():,} positions carry none - these come from "
-              f"shards written before outcomes were recorded, and train on the "
-              f"search score alone")
+        print(f"  {(~known).sum():,} positions carry none - a match run "
+              f"(--our-side), or shards written before outcomes were recorded. "
+              f"These train on the search score alone")
 
     print(f"\nwrote {out_path} ({os.path.getsize(out_path) / 1e6:.1f} MB)")
     return len(arr)
@@ -628,7 +742,15 @@ MANIFEST = 'manifest.jsonl'
 RUN_KEYS = ('games', 'seed', 'seeds', 'pdn_frac', 'cut_min', 'cut_max',
             'random_plies', 'depth', 'seconds', 'skip_plies', 'eps',
             'min_pieces', 'move_cap', 'pool_cache', 'teacher',
-            'teacher_seconds')
+            'teacher_seconds', 'our_side')
+
+#: what a manifest that predates one of those keys was necessarily built with.
+#: The mismatch check reads the *stored* settings, so a key the old run never
+#: wrote is a key it cannot disagree about - and resuming a plain Kingsrow run
+#: under --our-side would splice a match into it unnoticed, which is exactly
+#: what the check exists to stop. Filling the gaps with the behaviour the older
+#: code had makes an added setting refuse like any other.
+PRE_KEYS = {'our_side': 'none'}
 
 
 def _read_manifest(shard_dir):
@@ -780,6 +902,7 @@ class ShardStore:
             raise SystemExit(
                 f"{self.dir} has a manifest with no run settings in it.\n"
                 f"Pass --discard-shards to set it aside and start over.")
+        config = dict(PRE_KEYS, **config)       # see PRE_KEYS
         diff = {k: (v, self.config.get(k)) for k, v in config.items()
                 if self.config.get(k) != v}
         if diff:
@@ -896,6 +1019,20 @@ def main():
                     help="time per ply for --teacher kingsrow, which has no "
                          "depth control; 0.05 reaches depth 15-19. This buys "
                          "the move and the label together")
+    ap.add_argument('--our-side', choices=('none', '1', '2', 'alternate'),
+                    default='none',
+                    help="play a MATCH instead of letting the teacher play "
+                         "both sides: our engine takes this colour and "
+                         "kingsrow the other, while kingsrow goes on labelling "
+                         "every position. The games then run on our engine's "
+                         "distribution - the positions its eval is actually "
+                         "wrong about - which a pure kingsrow run never "
+                         "reaches. Costs a second search on our plies, makes "
+                         "--depth/--seconds our real playing strength, applies "
+                         "--eps to our moves only, and records no game "
+                         "outcomes (see the module docstring). 'alternate' "
+                         "splits the games between both colours and is the one "
+                         "to want unless you need a fixed side")
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--seeds', choices=('ballot', 'pdn', 'mix'), default='mix',
                     help="where games start: the 11-man ballots, positions out "
@@ -923,6 +1060,12 @@ def main():
                                                   'selfplay_positions.npz'))
     args = ap.parse_args()
 
+    if args.our_side != 'none' and args.teacher != 'kingsrow':
+        raise SystemExit(
+            "--our-side needs --teacher kingsrow: it says which colour the "
+            "teacher hands to our engine, and under --teacher self our engine "
+            "already has both.")
+
     out_path = os.path.abspath(args.out)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     shard_dir = args.shard_dir or (out_path + '.shards')
@@ -948,16 +1091,24 @@ def main():
                               source=args.seeds, pdn_frac=args.pdn_frac,
                               pool_cache=args.pool_cache,
                               cut_min=args.cut_min, cut_max=args.cut_max)
-    oracle = (f"played and labelled by kingsrow at {args.teacher_seconds}s/ply"
-              if args.teacher == 'kingsrow' else
-              f"played and labelled by our own search at depth {args.depth}")
+    if args.teacher != 'kingsrow':
+        oracle = f"played and labelled by our own search at depth {args.depth}"
+    elif args.our_side == 'none':
+        oracle = f"played and labelled by kingsrow at {args.teacher_seconds}s/ply"
+    else:
+        side = ('alternating colours' if args.our_side == 'alternate'
+                else f"as player {args.our_side}")
+        oracle = (f"MATCH: our engine (depth {args.depth}, {args.seconds}s) "
+                  f"{side} vs kingsrow at {args.teacher_seconds}s/ply, which "
+                  f"labels every position\n  no game outcomes are recorded - "
+                  f"the labels are kingsrow's scores alone")
     print(f"{len(schedule)} games, {args.workers} workers, {oracle}")
     print(f"filters: ply >= {args.skip_plies}, pieces >= {args.min_pieces}, "
           f"no capture available, |eval| < {MATE_BAND}\n")
 
     jobs = [(board, player, seed, args.seconds, args.depth, args.skip_plies,
              args.random_plies, args.eps, args.min_pieces, args.move_cap,
-             args.teacher, args.teacher_seconds)
+             args.teacher, args.teacher_seconds, args.our_side)
             for board, player, seed in schedule]
     pending = [(i, j) for i, j in enumerate(jobs) if i not in store.done]
     if len(pending) < len(jobs):
@@ -968,7 +1119,7 @@ def main():
     base_rows = store.rows_on_disk
     t0 = time.time()
     done = 0
-    teacher_moves = fallbacks = 0
+    teacher_moves = fallbacks = our_moves = 0
     endings = {k: 0 for k in ENDINGS}
     interrupted = False
     if pending:
@@ -980,6 +1131,7 @@ def main():
                     rows.extend(game.samples)
                     teacher_moves += game.teacher_moves
                     fallbacks += game.fallbacks
+                    our_moves += game.our_moves
                     endings[game.ending] += 1
                     buffered.add(futures[fut])
                     done += 1
@@ -993,11 +1145,18 @@ def main():
                         n = store.rows_on_disk + len(rows)
                         eta = (el / done * (len(pending) - done)) / 60
                         # the fallback count is the only thing that says a
-                        # kingsrow run really was played by kingsrow
+                        # kingsrow run really was played by kingsrow. It is a
+                        # rate over the plies kingsrow was asked to move on, so
+                        # our own match plies stay out of the denominator and
+                        # are reported beside it instead.
                         played = teacher_moves + fallbacks
-                        fb = (f"  {fallbacks / played:.1%} plies fell back to "
-                              f"our engine" if args.teacher == 'kingsrow'
-                              and played else "")
+                        fb = ""
+                        if args.teacher == 'kingsrow' and played:
+                            fb = (f"  {fallbacks / played:.1%} plies fell back "
+                                  f"to our engine")
+                            if args.our_side != 'none':
+                                fb += (f", {our_moves / (played + our_moves):.0%}"
+                                       f" played by us")
                         # a run where 'floor' dominates produces a file with
                         # almost no outcome labels in it, and nothing later
                         # would say so
@@ -1039,10 +1198,15 @@ def main():
     # outcome labels that are quietly worthless. Say so loudly instead.
     floor_total = endings['floor_won'] + endings['floor_drawn']
     if floor_total >= 20 and endings['floor_won'] / floor_total < 0.02:
+        # under --our-side the outcome is not written, so the cost is not a file
+        # full of false draws - it is that our engine played the whole match
+        # without the database it normally searches with
+        cost = ("every one of those games is being labelled a draw"
+                if args.our_side == 'none' else
+                "our engine played this entire match without it")
         print(f"\n! {endings['floor_drawn']:,} of {floor_total:,} games ended at "
               f"the piece floor and NOT ONE resolved to a proven win.\n"
-              f"! That is what a missing endgame database looks like: every one "
-              f"of those games is being labelled a draw.\n"
+              f"! That is what a missing endgame database looks like: {cost}.\n"
               f"! Check that db/ is present (CHECKERS_DB_DIR overrides it) "
               f"before training on this file.")
 

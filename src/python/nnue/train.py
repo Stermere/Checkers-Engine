@@ -105,11 +105,30 @@ class Dataset:
     weight: float = 1.0   # per-sample loss weight
     outcome: torch.Tensor | None = None
     has_outcome: torch.Tensor | None = None
+    #: the scale `target` was derived under, so target_for() knows when the
+    #: cached column is already the right one
+    eval_scale: float = EVAL_SCALE
 
     def __len__(self):
         return len(self.idx)
 
-    def blended_target(self, lam):
+    def target_for(self, eval_scale=None):
+        """The label as a win probability, squashed at `eval_scale`.
+
+        Recomputed from the raw centipawn label rather than cached, so that a
+        search can vary the scale across trials without reloading 17M rows. It
+        is one sigmoid over the label column, which is nothing next to an epoch.
+
+        WLD labels are exact win/draw/loss and carry no scale, so they are
+        returned unchanged - which is the point: the scale changes what the
+        *teacher's score* is taken to mean, not what a tablebase verdict means.
+        """
+        if (eval_scale is None or self.kind == 'wld'
+                or eval_scale == self.eval_scale):
+            return self.target
+        return torch.sigmoid(self.label / eval_scale)
+
+    def blended_target(self, lam, eval_scale=None):
         """The target the loss actually sees, at this lambda.
 
         `lam` weights the teacher's search score against the game result:
@@ -119,10 +138,11 @@ class Dataset:
         result, and blending them toward 0.5 would teach the net that an
         unlabelled position is drawn.
         """
+        target = self.target_for(eval_scale)
         if self.outcome is None or lam >= 1.0:
-            return self.target
-        blended = lam * self.target + (1.0 - lam) * self.outcome
-        return torch.where(self.has_outcome, blended, self.target)
+            return target
+        blended = lam * target + (1.0 - lam) * self.outcome
+        return torch.where(self.has_outcome, blended, target)
 
 
 def encode_all(p1, p2, p1k, p2k, stm, chunk=500_000):
@@ -134,22 +154,75 @@ def encode_all(p1, p2, p1k, p2k, stm, chunk=500_000):
     return idx
 
 
-def load_dataset(path, device, limit=0):
-    """Read an .npz from either generator and encode it onto the device."""
+def load_dataset(path, device, limit=0, min_pieces=0, log=print, frac=0.0):
+    """Read an .npz from either generator and encode it onto the device.
+
+    `min_pieces` drops positions at or below the piece count the endgame
+    tablebase owns. `board_search.c` probes the database *before* `get_eval`, so
+    at those piece counts the net's output is computed and then thrown away -
+    training on them spends capacity on positions the engine never asks the net
+    about. `DB_MAX_TOTAL` in `endgame_db.c` is 6, so `--min-pieces 7` is the
+    setting that matches the engine; on `selfplay_large_kr` that is 18% of the
+    rows. Filtering here rather than at split time also saves encoding and
+    device memory for rows that would never be trained on.
+
+    Applied *after* `limit`, which stays "the first N rows of the file", so the
+    two compose predictably rather than `limit` silently meaning something
+    different once a filter is on.
+    """
     d = np.load(path)
+
+    # `frac` is `limit` expressed proportionally, which is what a hyperparameter
+    # search wants: one flag that shrinks every set by the same factor and so
+    # leaves the relative sizes - and with them what a blend weight means -
+    # exactly where they were. A flat `--limit 500000` across a 8.5M set and a
+    # 4M one silently reweights the mix instead.
+    #
+    # `stm` is read to get the row count because it is one byte per row where
+    # the boards are eight, so this costs a fraction of what loading p1 does.
+    # Both generators shuffle, so a prefix is a random sample.
+    if frac and 0.0 < frac < 1.0:
+        n_total = int(d['stm'].shape[0])
+        limit = max(1, int(n_total * frac))
+
     sl = slice(0, limit) if limit else slice(None)
     p1, p2, p1k, p2k, stm = (d['p1'][sl], d['p2'][sl], d['p1k'][sl],
                              d['p2k'][sl], d['stm'][sl])
 
+    keep = None
+    if min_pieces > 0:
+        pc = popcount(p1) + popcount(p2) + popcount(p1k) + popcount(p2k)
+        keep = pc >= min_pieces
+        if not keep.any():
+            # An all-tablebase set (db_positions.npz is every row <= 5 pieces)
+            # empties completely here. Silently training on nothing, or on a
+            # zero-length set the blend still reserves pull for, is worse than
+            # saying so: the fix is a decision about --data, not about this flag.
+            raise SystemExit(
+                f"{os.path.basename(path)} has no positions with >= "
+                f"{min_pieces} pieces, so --min-pieces {min_pieces} empties it.\n"
+                f"Drop it from --data (or give it weight 0) if that is what you "
+                f"meant, or lower --min-pieces.")
+        if not keep.all():
+            log(f"  {os.path.basename(path):<28} -{(~keep).sum():,} rows below "
+                f"{min_pieces} pieces ({(~keep).mean():.1%})")
+            p1, p2, p1k, p2k, stm = (p1[keep], p2[keep], p1k[keep],
+                                     p2k[keep], stm[keep])
+
+
+    def column(name):
+        """One label column, sliced and filtered the same way the boards were."""
+        col = d[name][sl]
+        return col if keep is None else col[keep]
 
     if 'wld' in d.files:
         kind = 'wld'
-        wld = d['wld'][sl].astype(np.int64)
+        wld = column('wld').astype(np.int64)
         target = WLD_TO_PROB[wld]
         label = torch.from_numpy(wld).to(device)
     elif 'eval_cp' in d.files:
         kind = 'eval_cp'
-        cp = d['eval_cp'][sl].astype(np.float32)
+        cp = column('eval_cp').astype(np.float32)
 
         # the same squashing the engine's eval implies: EVAL_SCALE centipawns
         # is one logit, so this is exactly the inverse of model.eval_cp()
@@ -165,8 +238,8 @@ def load_dataset(path, device, limit=0):
     # carried as a mask rather than folded into the value.
     outcome = has_outcome = None
     if 'result' in d.files and 'result_n' in d.files:
-        res = d['result'][sl].astype(np.float32)
-        res_n = d['result_n'][sl]
+        res = column('result').astype(np.float32)
+        res_n = column('result_n')
         outcome = torch.from_numpy(np.ascontiguousarray(res)).to(device)
         has_outcome = torch.from_numpy(np.ascontiguousarray(res_n > 0)).to(device)
 
@@ -178,7 +251,7 @@ def load_dataset(path, device, limit=0):
         idx=torch.from_numpy(idx.astype(np.int32)).to(device),
         target=torch.from_numpy(np.ascontiguousarray(target, dtype=np.float32)).to(device),
         label=label, pieces=pieces,
-        outcome=outcome, has_outcome=has_outcome)
+        outcome=outcome, has_outcome=has_outcome, eval_scale=EVAL_SCALE)
 
 
 def split(ds, n_val):
@@ -187,7 +260,8 @@ def split(ds, n_val):
         return Dataset(ds.name, ds.kind, ds.idx[s], ds.target[s], ds.label[s],
                        ds.pieces[s], ds.weight,
                        None if ds.outcome is None else ds.outcome[s],
-                       None if ds.has_outcome is None else ds.has_outcome[s])
+                       None if ds.has_outcome is None else ds.has_outcome[s],
+                       ds.eval_scale)
     return part(slice(n_val, None)), part(slice(0, n_val))
 
 
@@ -219,12 +293,12 @@ def wld_metrics(logits, wld):
     return {'acc': acc, 'sign': sign_acc, 'mae_prob': mae}
 
 
-def cp_metrics(logits, cp):
-    pred_cp = logits * EVAL_SCALE
+def cp_metrics(logits, cp, eval_scale=EVAL_SCALE):
+    pred_cp = logits * eval_scale
     mae_cp = (pred_cp - cp).abs().mean().item()
 
     prob = torch.sigmoid(logits)
-    mae_prob = (prob - torch.sigmoid(cp / EVAL_SCALE)).abs().mean().item()
+    mae_prob = (prob - torch.sigmoid(cp / eval_scale)).abs().mean().item()
 
     decisive = cp.abs() >= SIGN_DEADZONE_CP
     if decisive.any():
@@ -235,10 +309,10 @@ def cp_metrics(logits, cp):
     return {'mae_cp': mae_cp, 'sign': sign_acc, 'mae_prob': mae_prob}
 
 
-def metrics_for(ds, logits):
+def metrics_for(ds, logits, eval_scale=None):
     if ds.kind == 'wld':
         return wld_metrics(logits, ds.label)
-    return cp_metrics(logits, ds.label)
+    return cp_metrics(logits, ds.label, eval_scale or ds.eval_scale)
 
 
 def fmt_metrics(kind, m):
@@ -258,7 +332,7 @@ def infer(model, idx, batch=131072):
 
 
 @torch.no_grad()
-def evaluate(model, val_sets, loss_fn, lam=1.0):
+def evaluate(model, val_sets, loss_fn, lam=1.0, eval_scale=None):
     """Per-set metrics and per-set loss sums.
 
     The sums are returned rather than a single combined number because the
@@ -276,8 +350,9 @@ def evaluate(model, val_sets, loss_fn, lam=1.0):
     out = []
     for ds in val_sets:
         logits = infer(model, ds.idx)
-        losses = loss_fn(logits, ds.blended_target(lam))
-        out.append((ds, logits, metrics_for(ds, logits), losses.sum().item()))
+        losses = loss_fn(logits, ds.blended_target(lam, eval_scale))
+        out.append((ds, logits, metrics_for(ds, logits, eval_scale),
+                    losses.sum().item()))
     return out
 
 
@@ -308,6 +383,46 @@ def sample_weights(sets, req):
     return [w * scale / len(ds) for ds, w in zip(sets, req)]
 
 
+def piece_balance_weights(pieces, alpha, cap):
+    """Per-sample weights that flatten the piece-count distribution, mean 1.
+
+    The generated sets are wildly uneven in piece count, and not in the
+    direction the engine needs. Kingsrow-vs-Kingsrow games run to the 200-ply
+    cap, so most plies of a game are endgame manoeuvring: measured on
+    `selfplay_large_kr`, 18% of positions are at <= 6 pieces - where the
+    tablebase answers before `get_eval` is ever called, so the net's opinion is
+    discarded - 53% are at 7-10, and only 29% are at the 11+ piece counts where
+    a learned eval decides games.
+
+    `alpha` is how far to correct that: 0 leaves the natural distribution
+    alone, 1 gives every piece count equal aggregate pull, and values between
+    interpolate geometrically. Weight is `(1 / share(pieces)) ** alpha`,
+    renormalised to mean 1 so the *set's* aggregate pull, and with it the blend
+    ratio and the effective learning rate, are unchanged.
+
+    `cap` is not optional at alpha near 1. Inverse frequency alone would hand a
+    22-piece bucket holding a few hundred positions thousands of times the pull
+    of an 8-piece bucket holding eighty thousand, and the net would fit the
+    handful of rare rows and nothing else. The cap bounds the ratio between the
+    largest and smallest weight, applied before the renormalisation.
+    """
+    if alpha <= 0.0:
+        return np.ones(len(pieces), dtype=np.float32)
+
+    counts = np.bincount(pieces.astype(np.int64))
+    share = counts / max(counts.sum(), 1)
+    with np.errstate(divide='ignore'):
+        w = np.where(share > 0, share, 1.0) ** (-alpha)
+    # bound the spread before normalising, so `cap` means the same thing
+    # whatever the distribution underneath it looks like
+    seen = counts > 0
+    w[~seen] = 1.0
+    lo = w[seen].min()
+    w = np.minimum(w, lo * cap)
+    out = w[pieces.astype(np.int64)].astype(np.float32)
+    return out / out.mean()
+
+
 # ---------------------------------------------------------------------------
 # one training run
 # ---------------------------------------------------------------------------
@@ -334,6 +449,24 @@ class TrainConfig:
     # search score vs game result in the target: 1.0 is the score alone, 0.0 the
     # result alone. See Dataset.blended_target.
     lam: float = 1.0
+    # how far to flatten each set's piece-count distribution; 0 is off.
+    # See piece_balance_weights.
+    piece_balance: float = 0.0
+    piece_cap: float = 8.0
+    # centipawns per logit. Two distinct jobs are wearing one number here, and
+    # it is worth knowing which is which before sweeping it:
+    #   * here, in training, it decides how hard sigmoid(cp / scale) squashes
+    #     the teacher's score, i.e. how much of the range the net is given any
+    #     gradient to distinguish. Changing it changes what is learned.
+    #   * at export, it decides how a logit becomes centipawns for the engine.
+    #     The search is not scale free - EVAL_MAX clamps static evals at 1500
+    #     and TERMINATE_EARLY_THRESHOLD is 20 absolute centipawns - so this end
+    #     of it is a real strength knob that costs a build and a match, with no
+    #     retraining at all (match_net.py --eval-scale).
+    # They are separable and need not be equal. `val_loss` is not comparable
+    # across values of this, for the same reason `--score-lambda` exists: the
+    # target itself moves. Rank scale changes by mae_cp, or by games.
+    eval_scale: float = EVAL_SCALE
 
 
 def run_training(sets, cfg, score_req=None, score_lam=None, log=print,
@@ -391,10 +524,32 @@ def run_training(sets, cfg, score_req=None, score_lam=None, log=print,
                 log(f"  {ds.name}: predict-zero baseline {np.abs(cp).mean():.1f} cp")
 
     tr_idx = torch.cat([d.idx for d in train_sets])
-    tr_target = torch.cat([d.blended_target(cfg.lam) for d in train_sets])
-    tr_weight = torch.cat([torch.full((len(d),), d.weight, device=device)
+    tr_target = torch.cat([d.blended_target(cfg.lam, cfg.eval_scale)
                            for d in train_sets])
+
+    # Per-sample weight = the set's aggregate pull x the piece-count correction.
+    # The correction has mean 1 within each set, so it redistributes pull across
+    # piece counts without moving it between sets - `--weights` still means what
+    # it says. Training only: the validation split keeps the natural
+    # distribution so that `val_loss` stays comparable across --piece-balance
+    # values, the same reason `--score-weights` exists for the blend.
+    tr_weight = torch.cat([
+        torch.from_numpy(d.weight * piece_balance_weights(
+            d.pieces, cfg.piece_balance, cfg.piece_cap)).to(device)
+        for d in train_sets])
     n_train = len(tr_idx)
+
+    if verbose and cfg.piece_balance > 0:
+        log(f"\npiece balance {cfg.piece_balance:g} (cap {cfg.piece_cap:g}x) - "
+            f"share of training pull by piece count:")
+        for ds in train_sets:
+            pw = piece_balance_weights(ds.pieces, cfg.piece_balance,
+                                       cfg.piece_cap)
+            rows = []
+            for pc in sorted(set(ds.pieces.tolist())):
+                m = ds.pieces == pc
+                rows.append(f"{pc}:{m.mean():.0%}->{pw[m].sum() / pw.sum():.0%}")
+            log(f"  {ds.name:<28} {'  '.join(rows)}")
 
     if verbose:
         mem = sum(d.idx.element_size() * d.idx.nelement() for d in sets) / 1e6
@@ -438,7 +593,7 @@ def run_training(sets, cfg, score_req=None, score_lam=None, log=print,
 
             total_loss += loss.item()
 
-        results = evaluate(model, val_sets, loss_fn, score_lam)
+        results = evaluate(model, val_sets, loss_fn, score_lam, cfg.eval_scale)
         val_loss = combine_loss(results, score_sw)
         flag = ''
         if val_loss < best_loss:
@@ -448,9 +603,10 @@ def run_training(sets, cfg, score_req=None, score_lam=None, log=print,
             flag = ' *'
             torch.save({'state_dict': model.state_dict(),
                         'l1': model.l1_size, 'l2': model.l2_size,
-                        'eval_scale': EVAL_SCALE, 'val_loss': val_loss,
+                        'eval_scale': cfg.eval_scale, 'val_loss': val_loss,
                         'datasets': [d.name for d in sets],
                         'weights': list(req), 'lam': cfg.lam,
+                        'piece_balance': cfg.piece_balance,
                         'val': best_metrics},
                        cfg.out)
 
@@ -506,6 +662,26 @@ def main():
                     help="search score vs game result in the target: 1.0 (the "
                          "default) is the score alone, 0.0 the result alone. "
                          "Only affects rows whose dataset carries outcomes")
+    ap.add_argument('--piece-balance', type=float, default=0.0,
+                    help="flatten each set's piece-count distribution: 0 (the "
+                         "default) trains on it as generated, 1 gives every "
+                         "piece count equal pull, 0.3-0.5 corrects it part of "
+                         "the way. The generated sets are ~18%% tablebase-owned "
+                         "endings and only ~29%% at the 11+ pieces where the "
+                         "net decides games")
+    ap.add_argument('--piece-cap', type=float, default=3.0,
+                    help="most extra pull any one piece count may get under "
+                         "--piece-balance. Without it the rarest bucket, which "
+                         "may hold a few hundred rows, would outweigh the "
+                         "commonest")
+    ap.add_argument('--min-pieces', type=int, default=0,
+                    help="drop positions with fewer than N pieces. The engine "
+                         "probes the endgame tablebase before the net, and "
+                         "DB_MAX_TOTAL is 6, so at 6 pieces and below the net's "
+                         "output is discarded - making 7 the setting that "
+                         "matches the engine. Refuses to empty a set: an "
+                         "all-tablebase set like db_positions.npz has to leave "
+                         "--data instead")
     ap.add_argument('--out', default=os.path.join(NNUE_DIR, 'models', 'net.pt'))
 
     ap.add_argument('--epochs', type=int, default=30)
@@ -529,6 +705,13 @@ def main():
                     help=f"feature transformer width (default {L1}, use multiples of 128)")
     ap.add_argument('--l2', type=int, default=L2,
                     help=f"hidden layer width (default {L2}, any size)")
+    ap.add_argument('--eval-scale', type=float, default=EVAL_SCALE,
+                    help=f"centipawns per logit in the TRAINING target "
+                         f"(default {EVAL_SCALE:g}, from model.py). Recorded in "
+                         f"the checkpoint, so export.py and the engine follow "
+                         f"it automatically. Note the export-side scale can be "
+                         f"overridden separately by match_net.py --eval-scale, "
+                         f"which needs no retraining")
     ap.add_argument('--weight-decay', type=float, default=1e-6)
     ap.add_argument('--pct-start', type=float, default=0.15,
                     help="fraction of the schedule spent warming up (OneCycleLR)")
@@ -557,7 +740,7 @@ def main():
     t0 = time.time()
     sets = []
     for path in args.data:
-        ds = load_dataset(path, device, args.limit)
+        ds = load_dataset(path, device, args.limit, args.min_pieces)
         sets.append(ds)
 
         print(f"  {ds.name:<28} {len(ds):>9,} positions  labels={ds.kind}")
@@ -567,7 +750,8 @@ def main():
                       lr=args.lr, val_frac=args.val_frac, seed=args.seed,
                       l1=args.l1, l2=args.l2, weight_decay=args.weight_decay,
                       pct_start=args.pct_start, weights=args.weights,
-                      lam=args.lam)
+                      lam=args.lam, piece_balance=args.piece_balance,
+                      piece_cap=args.piece_cap, eval_scale=args.eval_scale)
     res = run_training(sets, cfg)
 
     # ---- breakdown by piece count, from the best checkpoint ----

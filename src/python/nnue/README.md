@@ -111,6 +111,11 @@ python src/python/nnue/train.py --epochs 60            # ~100 s on a 3070
 python src/python/nnue/export.py                       # -> nnue_weights.h
 ```
 
+## Training hyperparameters
+```bash
+python src/python/nnue/train.py --data src\python\nnue\data\selfplay_all.npz --out src/python/nnue/models/net.pt --l1 512 --l2 16 --epochs 150 --lr 0.001 --lambda 0.9 --piece-balance 0.7
+```
+
 `train.py --data` takes several `.npz` files and works out each one's label
 type (`wld` from the tablebase, `eval_cp` from self-play). `--weights` sets how
 much each set pulls, independent of how many rows it has, and every set is

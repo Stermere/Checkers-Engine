@@ -1,5 +1,53 @@
+import glob
+import os
 import sys
 from setuptools import setup, Extension
+
+ENGINE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "..", "engine")
+
+
+def engine_dependencies():
+    """Every file that goes into the build, not just the one source."""
+    return sorted(glob.glob(os.path.join(ENGINE_DIR, "*.c"))
+                  + glob.glob(os.path.join(ENGINE_DIR, "*.h")))
+
+
+def invalidate_stale(module_name, depends):
+    """Delete build outputs older than any dependency."""
+    newest = max((os.path.getmtime(p) for p in depends if os.path.exists(p)),
+                 default=0.0)
+
+    def stale_outputs(pattern):
+        return [p for p in glob.glob(pattern) if os.path.getmtime(p) < newest]
+
+    removed = []
+
+    # object files are pure build artifacts and cost seven seconds to rebuild
+    for obj in stale_outputs(os.path.join("build", "temp.*", "Release", "src",
+                                          "engine", "board_search.obj")):
+        os.remove(obj)
+        removed.append(obj)
+
+    for pyd in stale_outputs(os.path.join("build", "lib.*",
+                                          f"{module_name}.*.pyd")):
+        backup = pyd + ".prev"
+        try:
+            if os.path.exists(backup):
+                os.remove(backup)
+            os.replace(pyd, backup)
+        except OSError as e:
+            # held open by a running process is the common case; say so rather
+            # than building something that is not what was asked for
+            raise SystemExit(
+                f"{pyd} is out of date but could not be replaced ({e}).\n"
+                f"Something is holding it open - a data generation run, a "
+                f"Python session that imported it, or Dropbox mid-sync. Close "
+                f"it, or build under another name with --name.")
+        removed.append(f"{pyd} -> {os.path.basename(backup)}")
+
+    return removed
+
 
 def main():
     # Pass --old to build the extension as "search_engine_old" instead of "search_engine"
@@ -86,6 +134,10 @@ def main():
     for d in extra_defines:
         common_flags.extend(define(d))
 
+    depends = engine_dependencies()
+    for out in invalidate_stale(module_name, depends):
+        print(f"stale, removed: {out}")
+
     setup(
         name=module_name,
         version="2.0.0",
@@ -95,6 +147,7 @@ def main():
         ext_modules=[Extension(
             module_name,
             ["src/engine/board_search.c"],
+            depends=depends,
             extra_compile_args=common_flags,
             extra_link_args=common_link,
         )]
