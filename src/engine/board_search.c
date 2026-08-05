@@ -48,12 +48,111 @@
 #define WIN_SCORE  4000   // a win available right now, ie. at a distance of 0 plies
 
 // ---- search feature flags (for A/B testing individual features) ----
+// every one of these is #ifndef-guarded so a single build can be ablated from
+// the command line without editing this file, which is what makes it possible
+// to measure features individually rather than as a bundle:
+//
+//   python src/python/Package_engine.py build --name search_engine_x
+//          --define USE_HISTORY=1 --define USE_PVS=0
+//
+// (bundling is how the aspiration/history/root-reorder experiment ended up
+// uninterpretable: three features moved together, the total was negative, and
+// nothing said which one caused it.)
+#ifndef USE_ASPIRATION
 #define USE_ASPIRATION 0      // aspiration windows around the previous iteration's score
+#endif
+#ifndef USE_SINGULAR_EXT
 #define USE_SINGULAR_EXT 0    // forced (single-reply) moves do not consume depth
-#define USE_HISTORY 0         // order quiet moves by history heuristic
+#endif
+#ifndef USE_HISTORY
+#define USE_HISTORY 1         // order quiet moves by history heuristic (-2.1% nodes)
+#endif
+#ifndef USE_ROOT_REORDER
 #define USE_ROOT_REORDER 0    // order root moves by previous iteration's scores
+#endif
+// Measured null: +0.03% nodes at fixed depth 12. Kept behind a flag rather than
+// deleted because the reason it fails is a property of the move generator, and
+// would stop applying if that changed: jumps are emitted one SEGMENT at a time
+// (a multi jump arrives as several moves chained through forced_pos), so every
+// capture takes exactly one piece and there is almost never a victim to choose
+// between. Emit whole multi-jumps as single moves and this becomes worth
+// retesting.
+#ifndef USE_CAPTURE_ORDER
+#define USE_CAPTURE_ORDER 0
+#endif
+// The PV-node depth extension. This is flagged separately because USE_PVS
+// changes how often it fires without touching a line of its code: a node
+// searched with a null window can never be labelled PV_NODE (that needs
+// board_eval strictly between alpha and beta, and beta == alpha + 1 leaves no
+// room), so under PVS only the real principal variation carries the label and
+// the extension stops firing all over the tree. Whether that is a gain or a
+// loss is a separate question from whether PVS itself is, and it cannot be
+// answered without being able to turn the extension off.
+#ifndef USE_PV_EXTENSION
+#define USE_PV_EXTENSION 1
+#endif
+#ifndef USE_FORCED_CONTINUATION
 #define USE_FORCED_CONTINUATION 1 // multi-jumps must continue with the same piece (correct rules)
+#endif
+#ifndef USE_ENDGAME_DB
 #define USE_ENDGAME_DB 1      // probe the endgame WLD tablebase (db/wld_*.bin) when present
+#endif
+
+// ---- evaluation-guided search ----
+// Everything below asks the evaluation what it thinks of a position the search
+// has NOT looked into yet, and acts on the answer. That is only worth doing with
+// an evaluation accurate enough to be believed: the handcrafted eval was not,
+// which is why none of this existed before the network.
+// Asking the network what it thinks of an interior node is FREE here, which is
+// the measurement this whole section rests on: a build that computed a static
+// eval at every interior node and used it for nothing visited a bit-identical
+// tree (3,835,499 nodes both ways, fixed depth 12) at the same speed. The lazy
+// accumulator in nnue.c is why - materialising an interior node shortens the
+// walk-back for every leaf evaluation beneath it, so the extra evaluations very
+// nearly pay for themselves. The eval is not the cost; only the decisions are.
+#ifndef USE_STATIC_EVAL
+#define USE_STATIC_EVAL 1
+#endif
+#ifndef USE_RFP
+#define USE_RFP 1             // reverse futility pruning: way above beta, stop looking (-5.9% nodes)
+#endif
+#ifndef USE_FUTILITY
+#define USE_FUTILITY 1        // skip quiet moves that cannot plausibly reach alpha (-14.6% nodes)
+#endif
+// Measured NEGATIVE: +8.6% nodes at fixed depth for a marginal accuracy gain,
+// i.e. it buys back less than the reductions it gives up are worth. Off.
+#ifndef USE_IMPROVING
+#define USE_IMPROVING 0
+#endif
+
+// Margins are in centipawns on the network's scale (NNUE_EVAL_SCALE = 120, so a
+// man is worth roughly 100), applied per ply of remaining depth.
+//
+// These were swept, and the sweep mattered more than the reasoning did. The
+// first RFP setting tried was 140/depth<=4 - deliberately conservative, on the
+// argument that checkers has no null move to fall back on and that zugzwang is
+// not an exception here but the normal state of an endgame, so "I am so far
+// ahead I could afford to do nothing" is exactly the assumption a checkers
+// position is entitled to violate. That reasoning is still sound, but the
+// conservative margin measured +2.4% nodes - it fired too rarely to pay for its
+// own has_any_jump test, and looked like the structural failure it was
+// reasonable to predict. Loosening to 80/depth<=6 turned it into -5.9%.
+// A margin choice inverted the sign; do not conclude from one point.
+//
+// Pushing further (futility 4/100, RFP 60/8) bought only 4.3% more nodes over
+// these values, so this is where the returns stop.
+#ifndef RFP_MAX_DEPTH
+#define RFP_MAX_DEPTH 6
+#endif
+#ifndef RFP_MARGIN
+#define RFP_MARGIN 80
+#endif
+#ifndef FUTILITY_MAX_DEPTH
+#define FUTILITY_MAX_DEPTH 3
+#endif
+#ifndef FUTILITY_MARGIN
+#define FUTILITY_MARGIN 120
+#endif
 
 // ---- reduction / extension behavior ----
 // building with /D OLD_ENGINE (build_old.bat) keeps the previous behavior so that
@@ -63,11 +162,15 @@
   #define USE_OLD_REDUCTION 1           // blanket late move reduction (reduces captures too, never re-searched)
   #define USE_LEGACY_MATERIAL_REDUCTION 1 // root-relative "-2 ply" reduction, fires inside every exchange
   #define USE_FREE_JUMP_CHAIN 0         // every segment of a multi jump burns a ply of depth
+  #define USE_PVS 0                     // null-window search of every move after the first
 #else
   #define USE_VERIFIED_LMR 1
   #define USE_OLD_REDUCTION 0
   #define USE_LEGACY_MATERIAL_REDUCTION 0
   #define USE_FREE_JUMP_CHAIN 1
+  #ifndef USE_PVS
+  #define USE_PVS 1
+  #endif
 #endif
 
 
@@ -92,12 +195,9 @@
 
 
 // Define some functions TODO use a header file for this
-struct board_data;
-struct board_data *board_data_constructor(int player, int move_start, int move_end);
 struct set* get_piece_locations(long long p1, long long p2, long long p1k, long long p2k);
 void update_piece_locations(int piece_loc_initial, int piece_loc_after, struct set* piece_loc);
 void undo_piece_locations_update(int piece_loc_initial, int piece_loc_after, struct set* piece_loc);
-void sort_moves(struct board_data* ptr, int player);
 int get_next_board_state(long long p1, long long p2, long long p1k, long long p2k, int pos_init, int pos_after, int player, int piece_type, char* offsets);
 int get_piece_at_location(long long p1, long long p2, long long p1k, long long p2k, int pos);
 int update_board(long long* p1, long long* p2, long long* p1k, long long* p2k, int piece_loc_initial, int piece_loc_after);
@@ -110,12 +210,8 @@ int negmax(long long* p1, long long* p2, long long* p1k, long long* p2k, int pla
 struct search_info* start_board_search(long long p1, long long p2, long long p1k, long long p2k, int player, float search_time, int search_depth, int forced_pos);
 void human_readble_board(long long p1, long long p2, long long p1k, long long p2k);
 long long n_ply_search(long long* p1, long long* p2, long long* p1k, long long* p2k, int player, struct set* piece_loc, char* offsets, int depth);
-void quick_sort(struct board_data* ptr, int low, int high);
-int partition(struct board_data* ptr, int low, int high);
 unsigned long long int update_hash(long long p1, long long p2, long long p1k, long long p2k, int pos_init, int pos_after, unsigned long long int hash, struct board_evaler* evaler);
-struct board_data* get_best_move(struct board_data *head, int player);
 void end_board_search(struct board_evaler* evaler);
-int free_board_data(struct board_data* data);
 void print_line(long long p1, long long p2, long long p1k, long long p2k, int player, unsigned long long hash, struct board_evaler* evaler);
 
 
@@ -403,9 +499,37 @@ void undo_piece_locations_update(int piece_loc_initial, int piece_loc_after, str
     set_add(piece_loc, piece_loc_initial);
 }
 
+#if USE_CAPTURE_ORDER
+// how promising a capture looks before searching it. This is the checkers
+// analogue of MVV-LVA, and it is deliberately small: the generator emits one
+// jump SEGMENT at a time (a multi jump arrives as several moves chained through
+// forced_pos), so every capture here takes exactly one piece and "most valuable
+// victim" reduces to king-or-man. Promotion is the other discriminator worth
+// having - landing on the back rank ends the segment with a new king.
+static inline int capture_score(long long p1, long long p2, long long p1k, long long p2k,
+                                int start, int end){
+    int score = 0;
+    // the captured piece sits between the two squares (see update_board)
+    int victim = get_piece_at_location(p1, p2, p1k, p2k, (start + end) / 2);
+    if (victim == 3 || victim == 4){
+        score += 100;   // a king is worth far more than a man
+    } else if (victim != 0){
+        score += 40;
+    }
+    // this segment promotes: p1 men move toward square 0, p2 men toward 63
+    int mover = get_piece_at_location(p1, p2, p1k, p2k, start);
+    if ((mover == 1 && end < 8) || (mover == 2 && end > 55)){
+        score += 60;
+    }
+    return score;
+}
+#endif
+
 // order the move list: transposition-table move first, then killer moves,
-// then the remaining (quiet) moves sorted by history-heuristic score
-void order_moves(int* moves, int num_moves, struct hash_table_entry* entry, struct killer_entry* killer_entry, long long* history, int is_jump){
+// then the remaining moves - quiet ones by history-heuristic score, captures by
+// what they take
+void order_moves(int* moves, int num_moves, struct hash_table_entry* entry, struct killer_entry* killer_entry, long long* history, int is_jump,
+                 long long p1, long long p2, long long p1k, long long p2k){
     short best_move = (entry != NULL) ? entry->best_move : NO_MOVE;
     int sorted_index = 0;
     // move the transposition table moves to the start of the move list
@@ -479,6 +603,31 @@ void order_moves(int* moves, int num_moves, struct hash_table_entry* entry, stru
             moves[(j + 1) * 2 + 1] = e;
         }
     }
+
+#if USE_CAPTURE_ORDER
+    // captures are forced in checkers, so at a jump node EVERY move is a capture
+    // and this list was previously left in generation order behind the hash and
+    // killer moves. Sorting it costs one board lookup per move and gives the
+    // alpha-beta window the best capture first.
+    if (is_jump){
+        for (int i = sorted_index + 1; i < num_moves; i++){
+            int s = moves[i * 2];
+            int e = moves[i * 2 + 1];
+            int sc = capture_score(p1, p2, p1k, p2k, s, e);
+            int j = i - 1;
+            while (j >= sorted_index
+                   && capture_score(p1, p2, p1k, p2k, moves[j * 2], moves[j * 2 + 1]) < sc){
+                moves[(j + 1) * 2] = moves[j * 2];
+                moves[(j + 1) * 2 + 1] = moves[j * 2 + 1];
+                j--;
+            }
+            moves[(j + 1) * 2] = s;
+            moves[(j + 1) * 2 + 1] = e;
+        }
+    }
+#else
+    (void)p1; (void)p2; (void)p1k; (void)p2k;
+#endif
 }
 
 // reorder the root move list to match the previous iteration's scores (descending).
@@ -831,9 +980,13 @@ int should_extend_or_reduce(int depth, int depth_abs, int in_quiescence, int is_
     // PV-node extension (only for entries from the current search: the persistent
     // transposition table holds PV labels from older searches too, which would
     // otherwise trigger extensions all over the tree)
+#if USE_PV_EXTENSION
     if (node_type == PV_NODE && depth_abs > 8 && table_entry->age == evaler->hash_table->age){
            depth++;
     }
+#else
+    (void)node_type;
+#endif
 
 #if USE_LEGACY_MATERIAL_REDUCTION
     // legacy behavior, kept only for the OLD_ENGINE reference build.
@@ -983,7 +1136,7 @@ int negmax(long long* p1, long long* p2, long long* p1k, long long* p2k, int pla
         long long* history = NULL;
 #endif
         order_moves(&moves[0], num_moves, table_entry, evaler->killer_table->table + depth_abs,
-                    history, is_jump);
+                    history, is_jump, *p1, *p2, *p1k, *p2k);
     }
 
     // if there are no move then a player must have won, or there are no captures so end this branch (only count as a win if captures_only is false)
@@ -1003,11 +1156,84 @@ int negmax(long long* p1, long long* p2, long long* p1k, long long* p2k, int pla
         // if there are no moves and captures only is true then we found the end of a catures only search evaluate the position and return.
         // clamped so a heuristic score can never reach into the proven band and be
         // mistaken for a win - see the score band comment at the top of the file
-        int static_eval = get_eval(*p1, *p2, *p1k, *p2k, player, piece_loc, evaler, depth_abs);
-        return max(-EVAL_MAX, min(EVAL_MAX, static_eval));
+        int q_eval = get_eval(*p1, *p2, *p1k, *p2k, player, piece_loc, evaler, depth_abs);
+        return max(-EVAL_MAX, min(EVAL_MAX, q_eval));
     }
 
     depth = should_extend_or_reduce(depth, depth_abs, force_captures, is_jump, forced_pos, num_moves, player, *p1 | *p1k, *p2 | *p2k, table_entry, evaler);
+
+    // ---- what the evaluation thinks of THIS node, before searching it ----
+    // Computed only where it is both meaningful and affordable:
+    //   * depth > 0        - quiescence already evaluates at its own leaves
+    //   * !is_jump         - captures are forced, so at a jump node the side to
+    //                        move has no choice at all and a static score taken
+    //                        mid-exchange describes a position nobody can hold
+    //   * forced_pos < 0   - likewise mid multi-jump
+    //   * beta > alpha + 1 is NOT required: null-window nodes are exactly where
+    //                        the pruning below pays off most
+    // The result is cached in the transposition entry, so the second visit to a
+    // position (very common across iterative deepening) does not pay again.
+    int static_eval = NO_EVAL;
+    int improving = 0;
+    (void)improving;
+#if USE_STATIC_EVAL
+    if (depth > 0 && !is_jump && forced_pos < 0){
+        if (table_entry != NULL && table_entry->static_eval != NO_EVAL
+            && table_entry->player == player){
+            static_eval = table_entry->static_eval;
+        } else {
+            int raw = get_eval(*p1, *p2, *p1k, *p2k, player, piece_loc, evaler, depth_abs);
+            static_eval = max(-EVAL_MAX, min(EVAL_MAX, raw));
+        }
+    }
+
+    if (depth_abs < evaler->static_stack_size){
+        evaler->static_eval_stack[depth_abs] = (short)static_eval;
+        evaler->static_eval_player[depth_abs] = (char)player;
+    }
+
+#if USE_IMPROVING
+    // is the side to move better off than it was on its own previous turn? A
+    // position that is getting better is more likely to be worth a full look, so
+    // the reductions below back off. Walking back to find the same player's last
+    // turn rather than assuming depth_abs - 2 is what makes this correct across
+    // jump chains, which do not alternate the side to move.
+    if (static_eval != NO_EVAL && depth_abs < evaler->static_stack_size){
+        for (int back = depth_abs - 1; back >= 0 && back >= depth_abs - 4; back--){
+            if (evaler->static_eval_player[back] != player){
+                continue;
+            }
+            if (evaler->static_eval_stack[back] != NO_EVAL){
+                improving = (static_eval > evaler->static_eval_stack[back]);
+            }
+            break;
+        }
+    }
+#endif
+
+#if USE_RFP
+    // ---- reverse futility pruning ----
+    // The side to move is so far above beta that even conceding RFP_MARGIN per
+    // remaining ply it still fails high, so return without searching.
+    //
+    // The assumption is "a position this good does not collapse in the next few
+    // plies". In chess that is underwritten by the null move - the side to move
+    // can nearly always pass and stay winning. Checkers has no such backstop:
+    // the obligation to move IS the losing mechanism in a large class of
+    // endings. Three guards keep the bet honest:
+    //   * only at non-PV (null-window) nodes, where a wrong bound costs a
+    //     re-search rather than the principal variation
+    //   * only in quiet positions - neither side has a capture available, so
+    //     nothing is hanging that a single reply could take
+    //   * never against a proven score, where "close to beta" is meaningless
+    if (static_eval != NO_EVAL && beta == alpha + 1 && depth <= RFP_MAX_DEPTH
+        && beta < WIN_MIN && beta > -WIN_MIN
+        && !has_any_jump(*p1, *p2, *p1k, *p2k, player == 1 ? 2 : 1)
+        && static_eval - RFP_MARGIN * depth >= beta){
+        return static_eval;
+    }
+#endif
+#endif // USE_STATIC_EVAL
 
 
     // the the next boards are ready to be searched so begin the search!
@@ -1017,6 +1243,33 @@ int negmax(long long* p1, long long* p2, long long* p1k, long long* p2k, int pla
         // prepare moves
         int move_start = moves[i * 2];
         int move_end = moves[(i * 2) + 1];
+
+#if USE_STATIC_EVAL && USE_FUTILITY
+        // ---- futility pruning ----
+        // This node is already so far below alpha that a quiet move - which by
+        // definition wins no material - cannot plausibly close the gap, so skip
+        // it without making it on the board at all. static_eval is only ever set
+        // at a node where no capture exists, so every move here is quiet.
+        //
+        // Never the first move (the ordering has put the best candidate there and
+        // it has to be searched for the node to return anything), never at a PV
+        // node, and never a move that promotes: a new king is a material-sized
+        // swing that this margin does not describe.
+        //
+        // Like all forward pruning this makes the stored upper bound conditional
+        // on the guess being right - the node returns a score that ignores moves
+        // it never looked at. That is the trade every futility scheme makes; the
+        // margin is what buys it back.
+        if (static_eval != NO_EVAL && i > 0 && beta == alpha + 1
+            && depth > 0 && depth <= FUTILITY_MAX_DEPTH
+            && alpha > -WIN_MIN && alpha < WIN_MIN
+            && static_eval + FUTILITY_MARGIN * depth <= alpha){
+            int mover = get_piece_at_location(*p1, *p2, *p1k, *p2k, move_start);
+            if (!((mover == 1 && move_end < 8) || (mover == 2 && move_end > 55))){
+                continue;
+            }
+        }
+#endif
 
         // get the hash for this next board (always do this before the move is made on the board)
         next_hash = update_hash(*p1, *p2, *p1k, *p2k, move_start, move_end, hash, evaler);
@@ -1089,6 +1342,14 @@ int negmax(long long* p1, long long* p2, long long* p1k, long long* p2k, int pla
                 reduction++;
             }
 
+#if USE_IMPROVING
+            // this side's position has been getting better since its last turn,
+            // so the move list is more likely to hold something worth finding -
+            // give it back a ply
+            if (improving && reduction > 1){
+                reduction--;
+            }
+#endif
 
             // never reduce straight into quiescence
             if (reduction > depth - 2){
@@ -1105,25 +1366,70 @@ int negmax(long long* p1, long long* p2, long long* p1k, long long* p2k, int pla
         // a multi jump is a single move, so continuing the chain must not consume a
         // ply: otherwise an n-jump capture eats n plies of depth and long exchanges
         // get cut off half way through
-        int child_depth = depth - 1 - reduction;
+        int full_depth = depth - 1;
 #if USE_FREE_JUMP_CHAIN
         if (player_next == player){
-            child_depth = depth - reduction;
+            full_depth = depth;
         }
 #endif
+        int child_depth = full_depth - reduction;
+
+        // ---- principal variation search ----
+        // the first move of a node is searched with the real window to establish a
+        // score. Every later move only has to prove it is NOT better than that, and
+        // a null window ([alpha, alpha+1]) settles that question over a much smaller
+        // tree than the real window does, because every child of it can cut off
+        // immediately. Only a move that beats alpha anyway is re-searched with the
+        // real window to find out what it is actually worth.
+        //
+        // This is exact: it cannot change the value the node returns, only how many
+        // nodes it takes to get there. What it costs is the occasional re-search,
+        // and what it saves grows with how well the moves are ordered - the better
+        // the first move, the more often the null window is right. That is why it
+        // belongs with a strong evaluation rather than before one.
+        //
+        // Not applied at the root: the root's per-move scores are recorded in
+        // search_results->evals and read back by only_viable_move() and the root
+        // reorder, and a null window would turn those scores into bounds. Nor in a
+        // node that is already searching a null window (beta == alpha + 1), where
+        // it would be a no-op.
+        int use_pvs = 0;
+#if USE_PVS
+        use_pvs = (depth_abs > 0 && i > 0 && beta > alpha + 1);
+#endif
+        int nw_alpha = next_alpha;
+        int nw_beta = next_beta;
+        if (use_pvs){
+            // the null window is [alpha, alpha+1] in THIS node's frame; mirror it
+            // for the child only when the side to move flips
+            nw_alpha = (flip == 1) ? alpha : -(alpha + 1);
+            nw_beta  = (flip == 1) ? alpha + 1 : -alpha;
+        }
 
         eval = negmax(p1, p2, p1k, p2k, player_next, piece_loc, child_depth,
-                    next_alpha, next_beta, evaler, next_hash,
+                    nw_alpha, nw_beta, evaler, next_hash,
                     depth_abs + 1, next_forced) * flip;
 #if USE_VERIFIED_LMR
         // the reduced search came back above alpha, so it may be a real improvement:
         // verify it at full depth before it is allowed to change the node's result
+        // (still on whatever window the first pass used - proving the move is good
+        // is a separate question from finding out how good, which the PVS re-search
+        // below handles)
         if (reduction > 0 && eval > alpha && eval != INFINITY && eval != -INFINITY){
-            eval = negmax(p1, p2, p1k, p2k, player_next, piece_loc, depth - 1,
-                        next_alpha, next_beta, evaler, next_hash,
+            eval = negmax(p1, p2, p1k, p2k, player_next, piece_loc, full_depth,
+                        nw_alpha, nw_beta, evaler, next_hash,
                         depth_abs + 1, next_forced) * flip;
         }
 #endif
+        // the null window only ever returns a bound. This move beat alpha, so it is
+        // a new principal variation and the node needs its true score - re-search it
+        // with the real window. (eval >= beta needs no re-search: the node is about
+        // to fail high and the bound is all that leaves it.)
+        if (use_pvs && eval > alpha && eval < beta && eval != INFINITY && eval != -INFINITY){
+            eval = negmax(p1, p2, p1k, p2k, player_next, piece_loc, full_depth,
+                        next_alpha, next_beta, evaler, next_hash,
+                        depth_abs + 1, next_forced) * flip;
+        }
 
 
         // undo the update to the board and piece locations
@@ -1182,77 +1488,13 @@ int negmax(long long* p1, long long* p2, long long* p1k, long long* p2k, int pla
         node_type = PV_NODE;
     }
 
-    // store the eval in the hash table
-    add_hash_entry(evaler->hash_table, hash, board_eval, depth, evaler->search_depth, player, best_move, node_type);
+    // store the eval in the hash table, along with the static evaluation of this
+    // node if one was computed - it is independent of the search and stays valid
+    // for every later visit, whatever depth or window that visit arrives with
+    add_hash_entry(evaler->hash_table, hash, board_eval, depth, evaler->search_depth, player, best_move, node_type,
+                   (short)static_eval);
 
     return adjust_mate_score(board_eval);
-}
-
-// marks pv nodes in the hash table
-void PV_labler(long long* p1, long long* p2, long long* p1k, long long* p2k, int player,
-    struct set* piece_loc, int depth, unsigned long long int hash, struct board_evaler* evaler, int forced_pos) {
-
-    struct hash_table_entry* table_entry = get_hash_entry(evaler->hash_table, hash, evaler->search_depth, depth);
-    if (table_entry == NULL || table_entry->best_move == NO_MOVE || depth <= 0 || table_entry->player != player) {
-        return;
-    }
-
-    table_entry->node_type = PV_NODE;
-
-    short move_start = (table_entry->best_move >> 8) & 0xFF;
-    short move_end = table_entry->best_move & 0xFF;
-
-    hash = update_hash(*p1, *p2, *p1k, *p2k, move_start, move_end, hash, evaler);
-    if (forced_pos >= 0){
-        hash ^= evaler->hash_table->piece_hash_diff[FORCED_KEY_OFFSET + forced_pos];
-    }
-    int initial_piece_type = get_piece_at_location(*p1, *p2, *p1k, *p2k, move_start);
-    int jumped_piece_type = update_board(p1, p2, p1k, p2k, move_start, move_end);
-    update_piece_locations(move_start, move_end, piece_loc);
-    int player_next = get_next_board_state(*p1, *p2, *p1k, *p2k, move_start, move_end, player, initial_piece_type, evaler->piece_offsets);
-    int next_forced = -1;
-    if (player_next == player){
-#if USE_FORCED_CONTINUATION
-        next_forced = move_end;
-        hash ^= evaler->hash_table->piece_hash_diff[FORCED_KEY_OFFSET + move_end];
-#endif
-    } else {
-        hash ^= evaler->hash_table->piece_hash_diff[SIDE_KEY_INDEX];
-    }
-
-    PV_labler(p1, p2, p1k, p2k, player_next, piece_loc, depth - 1, hash, evaler, next_forced);
-
-    undo_piece_locations_update(move_start, move_end, piece_loc);
-    undo_board_update(p1, p2, p1k, p2k, move_start, move_end, jumped_piece_type, initial_piece_type);
-}
-
-int MTDF(long long* p1, long long* p2, long long* p1k, long long* p2k, int player,
-    struct set* piece_loc, int depth, int f, struct board_evaler* evaler,
-    unsigned long long int hash) {
-
-    int g = f;
-    int upper_bound = INFINITY;
-    int lower_bound = -INFINITY;
-
-
-
-    while (lower_bound < upper_bound) {
-        int beta = (g == lower_bound) ? g + 1 : g;
-
-        g = negmax(p1, p2, p1k, p2k, player, piece_loc, depth, beta - 1, beta,
-            evaler, hash, 0, -1);
-
-        if (g < beta) {
-            upper_bound = g;
-        } else {
-            lower_bound = g;
-        }
-    }
-
-    // follow the pv line labeling each node as a PV node
-    PV_labler(p1, p2, p1k, p2k, player, piece_loc, depth, hash, evaler, -1);
-
-    return g;
 }
 
 int only_viable_move(struct search_results* search_results) {
@@ -1468,6 +1710,8 @@ void end_board_search(struct board_evaler* evaler){
     free(evaler->history);
     free(evaler->cone_p1);
     free(evaler->cone_p2);
+    free(evaler->static_eval_stack);
+    free(evaler->static_eval_player);
     nnue_stack_destroy(evaler->nnue);
     free(evaler->piece_pos_map_p1);
     free(evaler->piece_pos_map_p2);

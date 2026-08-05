@@ -12,6 +12,11 @@
 #define NULL_MOVE 4
 #define NO_MOVE 0 // no move was found
 
+// "no static evaluation is cached for this entry". Deliberately outside the
+// heuristic band (board_search.c clamps static evals to +-EVAL_MAX = 1500), so
+// it can never collide with a real score.
+#define NO_EVAL 32000
+
 #define MT_STATE_SIZE 624
 #define NUMBER_OF_BUCKETS 4
 
@@ -41,6 +46,12 @@ struct hash_table_entry {
     // moves are stored in a format of: top byte is the start square, bottom byte is the end square
     short best_move;
     char node_type;
+    // the STATIC evaluation of this position (what the net says without searching),
+    // as opposed to `eval` which is the result of a search. Cached here because the
+    // search now consults it at interior nodes for its pruning margins, and a
+    // transposition hit should not have to pay for the network again. NO_EVAL when
+    // this entry has never been evaluated statically.
+    short static_eval;
 };
 
 // holds the tabel of hash_table_entry's and the size of the table
@@ -130,9 +141,12 @@ struct hash_table* init_hash_table(long long int size){
     return table;
 }
 
-// adds a new entry to the hash table (depth is the depth remaining at the node)
+// adds a new entry to the hash table (depth is the depth remaining at the node).
+// static_eval may be NO_EVAL, meaning "the caller did not compute one"; an
+// already cached static evaluation for the same position is kept in that case,
+// since it stays valid however the search score changes.
 void add_hash_entry(struct hash_table *table, unsigned long long int hash, int eval, int depth, int age, int player,
-                    short best_move, char node_type){
+                    short best_move, char node_type, short static_eval){
 
     struct hash_table_entry* entry = get_storage_index(table, hash);
     if (entry == NULL) {
@@ -140,10 +154,19 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, int e
     }
 
     if (entry->hash == hash) {
-        // same position: keep a deeper entry from this search unless the new one is exact
+        // same position: the static evaluation does not depend on the search, so
+        // a freshly computed one is never worse than what is already there and a
+        // missing one must not erase it
+        if (static_eval == NO_EVAL) {
+            static_eval = entry->static_eval;
+        }
+        // keep a deeper entry from this search unless the new one is exact
         int stale = (entry->age != table->age);
         entry->age = table->age;
         if (!stale && entry->depth > depth && node_type != PV_NODE) {
+            // the search result is not being replaced, but a static evaluation the
+            // entry did not have before still is - it is strictly new information
+            entry->static_eval = static_eval;
             return;
         }
     } else {
@@ -159,6 +182,7 @@ void add_hash_entry(struct hash_table *table, unsigned long long int hash, int e
     entry->age = table->age;
     entry->hash = hash;
     entry->eval = eval;
+    entry->static_eval = static_eval;
 }
 
 // returns the entry for the given hash

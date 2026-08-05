@@ -70,6 +70,15 @@ struct board_evaler{
     unsigned long long* cone_p1; // promotion cones: squares a p1 man at [pos] may traverse to reach row 0
     unsigned long long* cone_p2; // same for p2 men heading to row 7
     struct nnue_stack* nnue; // per-ply incremental accumulators (NULL in the OLD_ENGINE build)
+    // static evaluation recorded at each ply, and the side it was relative to.
+    // The search reads these back to tell whether the side to move is doing
+    // better than it was on its previous turn. The player has to be stored
+    // alongside because a multi jump does not flip the side to move, so plies
+    // and turns are not the same thing here - depth_abs - 2 is NOT reliably the
+    // same player's last turn.
+    short* static_eval_stack;
+    char* static_eval_player;
+    int static_stack_size;
     clock_t start_time;
     double time_limit;
 
@@ -115,6 +124,16 @@ struct board_evaler* board_evaler_constructor(long long p1_piece_loc, long long 
 #else
     evaler->nnue = NULL;
 #endif
+    // sized and indexed exactly like the nnue stack above (depth_abs), with the
+    // same slack for quiescence and jump chains; the search bounds-checks before
+    // touching it so overrunning the slack costs a heuristic, not correctness
+    evaler->static_stack_size = search_depth * 4 + 64;
+    evaler->static_eval_stack = malloc(sizeof(short) * evaler->static_stack_size);
+    evaler->static_eval_player = malloc(sizeof(char) * evaler->static_stack_size);
+    for (int i = 0; i < evaler->static_stack_size; i++){
+        evaler->static_eval_stack[i] = NO_EVAL;
+        evaler->static_eval_player[i] = 0;
+    }
     evaler->search_results = malloc(sizeof(struct search_results));
     evaler->search_results->num_moves = 0;
     evaler->search_results->best_move = NO_MOVE;
