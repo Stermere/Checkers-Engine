@@ -444,6 +444,17 @@ static void nnue_acc_update(int16_t* dst, const int16_t* src,
 // accumulator -> centipawns from the side to move's point of view.
 // This is the part whose cost does not shrink with incremental updates, so it
 // is the one that sets how wide L1 can usefully get.
+// A hidden neuron's int32 dot product -> its stored int16 activation.
+// Units 1/(127*64) -> 1/127, rounding half up via floor((x+32)/64), then clipped
+// to [0, 127]. `>> 6` and not `/ 64`: the shift floors for negative sums, the
+// division does not, and the reference implementation floors.
+static inline int16_t nnue_h_activate(int32_t sum){
+    sum = (sum + (NNUE_QUANT_W / 2)) >> NNUE_QUANT_W_SHIFT;
+    if (sum < 0) sum = 0;
+    else if (sum > NNUE_QUANT_ACT) sum = NNUE_QUANT_ACT;
+    return (int16_t)sum;
+}
+
 static int nnue_propagate(const int16_t* acc){
     NNUE_ALIGN64 int16_t clipped[NNUE_L1];
     int16_t hidden[NNUE_L2];
@@ -469,7 +480,47 @@ static int nnue_propagate(const int16_t* acc){
     // hidden layer. Activations are in [0,127] and weights fit int16, so a
     // 128-term int32 dot product cannot come close to overflowing - which is
     // why pairwise madd accumulation gives exactly the reference's total.
-    for (i = 0; i < NNUE_L2; i++){
+    i = 0;
+#if NNUE_SIMD
+    // Four output neurons at a time. Two separate things come out of the
+    // blocking, and the second one is the reason it is here:
+    //
+    //  * one `clipped` load feeds four multiply-accumulates instead of one, so
+    //    the 512 activations are read L2/4 times rather than L2 times.
+    //  * the four accumulators are INDEPENDENT. A single accumulator makes the
+    //    loop a serial chain of NNUE_L1/NNUE_LANES dependent vector adds, and
+    //    that chain - not the multiplies - was what the layer was waiting on:
+    //    it measured ~1.1 vector ops per cycle on a Zen 3 that will retire 2-3.
+    //    Four chains interleaved turn a latency-bound loop into a
+    //    throughput-bound one.
+    //
+    // Regrouping is safe because the sum is integer: addition is associative and
+    // commutative, so the total is identical, not merely close. That is the same
+    // argument that lets this file vectorise at all, and verify_nnue_c.py is what
+    // actually proves it.
+    for (; i + 3 < NNUE_L2; i += 4){
+        const int16_t* w0 = nnue_h_weight + (size_t)i * NNUE_L1;
+        const int16_t* w1 = w0 + NNUE_L1;
+        const int16_t* w2 = w1 + NNUE_L1;
+        const int16_t* w3 = w2 + NNUE_L1;
+        nnue_vec32 s0 = nv32_zero(), s1 = nv32_zero();
+        nnue_vec32 s2 = nv32_zero(), s3 = nv32_zero();
+        int j;
+        for (j = 0; j < NNUE_L1; j += NNUE_LANES){
+            const nnue_vec a = nv_load(clipped + j);
+            s0 = nv32_add(s0, nv_madd(a, nv_load(w0 + j)));
+            s1 = nv32_add(s1, nv_madd(a, nv_load(w1 + j)));
+            s2 = nv32_add(s2, nv_madd(a, nv_load(w2 + j)));
+            s3 = nv32_add(s3, nv_madd(a, nv_load(w3 + j)));
+        }
+        hidden[i]     = nnue_h_activate(nnue_h_bias[i]     + nv32_hsum(s0));
+        hidden[i + 1] = nnue_h_activate(nnue_h_bias[i + 1] + nv32_hsum(s1));
+        hidden[i + 2] = nnue_h_activate(nnue_h_bias[i + 2] + nv32_hsum(s2));
+        hidden[i + 3] = nnue_h_activate(nnue_h_bias[i + 3] + nv32_hsum(s3));
+    }
+#endif
+    // whatever L2 leaves over (and the whole layer on the scalar path)
+    for (; i < NNUE_L2; i++){
         const int16_t* w = nnue_h_weight + (size_t)i * NNUE_L1;
         int32_t sum;
 #if NNUE_SIMD
@@ -487,12 +538,7 @@ static int nnue_propagate(const int16_t* acc){
             for (j = 0; j < NNUE_L1; j++) sum += (int32_t)clipped[j] * (int32_t)w[j];
         }
 #endif
-        // units 1/(127*64) -> 1/127, rounding half up via floor((x+32)/64).
-        // >> 6 and not / 64: the shift floors for negative sums, / 64 does not.
-        sum = (sum + (NNUE_QUANT_W / 2)) >> NNUE_QUANT_W_SHIFT;
-        if (sum < 0) sum = 0;
-        else if (sum > NNUE_QUANT_ACT) sum = NNUE_QUANT_ACT;
-        hidden[i] = (int16_t)sum;
+        hidden[i] = nnue_h_activate(sum);
     }
 
     // output layer - a single neuron over L2 terms, not worth vectorising

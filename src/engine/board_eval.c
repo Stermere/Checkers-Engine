@@ -47,6 +47,8 @@ char* compute_offsets();
 int king_dist(int pos, int player, int num_pieces);
 int tail_pins(long long p1, long long p2, long long p1k, long long p2k);
 int has_any_jump(long long p1, long long p2, long long p1k, long long p2k, int player);
+int has_any_move(long long p1, long long p2, long long p1k, long long p2k, int player);
+int can_jump_from(long long p1, long long p2, long long p1k, long long p2k, int pos, int piece_type);
 int calculatePieceBonus(int num_pieces);
 unsigned long long* compute_runaway_cones(int player);
 
@@ -70,22 +72,32 @@ struct board_evaler{
     unsigned long long* cone_p1; // promotion cones: squares a p1 man at [pos] may traverse to reach row 0
     unsigned long long* cone_p2; // same for p2 men heading to row 7
     struct nnue_stack* nnue; // per-ply incremental accumulators (NULL in the OLD_ENGINE build)
-    // static evaluation recorded at each ply, and the side it was relative to.
-    // The search reads these back to tell whether the side to move is doing
-    // better than it was on its previous turn. The player has to be stored
-    // alongside because a multi jump does not flip the side to move, so plies
-    // and turns are not the same thing here - depth_abs - 2 is NOT reliably the
-    // same player's last turn.
-    short* static_eval_stack;
-    char* static_eval_player;
-    int static_stack_size;
     clock_t start_time;
     double time_limit;
 
     // keep some interesting data
     long long int nodes;
     long long int avg_depth;
+    // how many of those nodes actually reached the evaluation. The share matters
+    // because the eval is the most expensive thing a node can do and most nodes
+    // never do it - a transposition hit, a database hit or a repetition draw all
+    // return first - so "what does a node cost" is unanswerable without it.
+    long long int evals;
     int extended_depth;
+    // The deepest ply the search actually reached, counting quiescence.
+    // extended_depth deliberately does not: it only counts nodes that still had
+    // depth budget left (depth >= 0), so it stops at the nominal horizon plus
+    // extensions and says nothing about the capture chains past it - which in
+    // checkers, where captures are mandatory and can run a long way, is most of
+    // what "how deep did it look" means to someone reading it. Reported next to
+    // extended_depth so the pair is not mistaken for one number.
+    int max_ply;
+#if SEARCH_DIAG
+    long long int diag_capped_nodes;   // nodes sitting at the max_depth cap
+    long long int diag_single_reply;   // nodes with exactly one legal move
+    long long int diag_single_reply_payable;  // ...that still cost a ply
+    long long int diag_single_reply_jump;     // ...of those, capture nodes
+#endif
 };
 
 struct search_results {
@@ -94,6 +106,23 @@ struct search_results {
     int evals[96];        // eval of each root move (parallel to moves)
     short best_move;      // best root move of the last completed iteration
     int best_eval;        // eval of that move
+
+    // The best root move of the iteration currently IN PROGRESS, committed the
+    // moment a root move raises alpha instead of at the end of the iteration.
+    // Without this an iteration that runs out of time is discarded whole, which
+    // throws away most of a move's thinking time - the branching factor means the
+    // last, unfinished iteration is usually larger than every completed one put
+    // together, and it is exactly the iteration that finds a refutation of the
+    // move the previous depth liked.
+    //
+    // Adopting it is sound because the comparison is at a FIXED depth: the move
+    // ordering searches the previous iteration's best move first, so it is
+    // `iter_best_move` until some later move returns a strictly better score at
+    // the same depth. If nothing beat it the value is a no-op; if something did,
+    // it beat it fairly.
+    short iter_best_move;
+    int iter_best_eval;
+    int iter_scored;      // how many root moves of this iteration have finished
 };
 
 struct board_evaler* board_evaler_constructor(long long p1_piece_loc, long long p2_piece_loc, int search_depth, double time_limit, clock_t start_time){
@@ -103,6 +132,14 @@ struct board_evaler* board_evaler_constructor(long long p1_piece_loc, long long 
     evaler->king_pos_map = compute_king_pos();
     evaler->nodes = 0ll;
     evaler->avg_depth = 0ll;
+    evaler->evals = 0ll;
+    evaler->max_ply = 0;
+#if SEARCH_DIAG
+    evaler->diag_capped_nodes = 0ll;
+    evaler->diag_single_reply = 0ll;
+    evaler->diag_single_reply_payable = 0ll;
+    evaler->diag_single_reply_jump = 0ll;
+#endif
     evaler->initial_piece_count_p1 = get_bits_set(p1_piece_loc);
     evaler->initial_piece_count_p2 = get_bits_set(p2_piece_loc);
     long long int hash_table_size = 1ll << 22;
@@ -124,20 +161,13 @@ struct board_evaler* board_evaler_constructor(long long p1_piece_loc, long long 
 #else
     evaler->nnue = NULL;
 #endif
-    // sized and indexed exactly like the nnue stack above (depth_abs), with the
-    // same slack for quiescence and jump chains; the search bounds-checks before
-    // touching it so overrunning the slack costs a heuristic, not correctness
-    evaler->static_stack_size = search_depth * 4 + 64;
-    evaler->static_eval_stack = malloc(sizeof(short) * evaler->static_stack_size);
-    evaler->static_eval_player = malloc(sizeof(char) * evaler->static_stack_size);
-    for (int i = 0; i < evaler->static_stack_size; i++){
-        evaler->static_eval_stack[i] = NO_EVAL;
-        evaler->static_eval_player[i] = 0;
-    }
     evaler->search_results = malloc(sizeof(struct search_results));
     evaler->search_results->num_moves = 0;
     evaler->search_results->best_move = NO_MOVE;
     evaler->search_results->best_eval = 0;
+    evaler->search_results->iter_best_move = NO_MOVE;
+    evaler->search_results->iter_best_eval = 0;
+    evaler->search_results->iter_scored = 0;
     evaler->start_time = start_time;
     evaler->time_limit = time_limit;
     evaler->extended_depth = 0;
@@ -149,6 +179,7 @@ struct board_evaler* board_evaler_constructor(long long p1_piece_loc, long long 
 // `depth_abs` is the ply this board sits at, which is how the network finds its
 // incremental accumulator; it is ignored by the handcrafted eval.
 int get_eval(long long p1, long long p2, long long p1k, long long p2k, int player, struct set* piece_loc, struct board_evaler* evaler, int depth_abs){
+    evaler->evals++;
 #if USE_NNUE
     // the net encodes the board from the side to move's point of view, so its
     // output is already player-relative and must NOT be negated again here.
@@ -400,6 +431,73 @@ int has_any_jump(long long p1, long long p2, long long p1k, long long p2k, int p
     // down-right (+9): enemy on pos+9, landing square on pos+18
     if (down & JUMP_COL_LE5 & (enemy >> 9) & (empty >> 18)) return 1;
 
+    return 0;
+}
+
+// column masks for a single diagonal step, the one-square counterparts of the
+// jump masks above (a step left needs column >= 1, a step right column <= 6)
+#define STEP_COL_GE1_E 0xFEFEFEFEFEFEFEFEull
+#define STEP_COL_LE6_E 0x7F7F7F7F7F7F7F7Full
+
+// "does this player have any legal move at all", answered set-wise.
+//
+// The quiescence search asks this at every leaf where no capture exists, to tell
+// a quiet position (evaluate it) from a loss (the side to move is stuck). It used
+// to answer it by running generate_all_moves a second time over every friendly
+// piece and looking at the count - building a whole move list to test it against
+// zero, at what is the most common node in the tree.
+//
+// Eight shift-and-mask tests over the whole bitboard replace that, and they are
+// the same tests generate_moves makes per piece, so the answer is identical by
+// construction: a jump exists exactly when has_any_jump says so, and otherwise a
+// move exists exactly when some piece has an empty square one diagonal step away
+// in a direction it may travel.
+int has_any_move(long long p1, long long p2, long long p1k, long long p2k, int player){
+    if (has_any_jump(p1, p2, p1k, p2k, player)) return 1;
+
+    unsigned long long occupied = (unsigned long long)(p1 | p2 | p1k | p2k);
+    unsigned long long empty = ~occupied;
+    unsigned long long up, down;
+
+    if (player == 1){
+        up = (unsigned long long)(p1 | p1k);
+        down = (unsigned long long)p1k;
+    } else {
+        up = (unsigned long long)p2k;
+        down = (unsigned long long)(p2 | p2k);
+    }
+
+    if (up & STEP_COL_GE1_E & (empty << 9)) return 1;   // up-left (-9)
+    if (up & STEP_COL_LE6_E & (empty << 7)) return 1;   // up-right (-7)
+    if (down & STEP_COL_GE1_E & (empty >> 7)) return 1; // down-left (+7)
+    if (down & STEP_COL_LE6_E & (empty >> 9)) return 1; // down-right (+9)
+
+    return 0;
+}
+
+// "can the piece standing on `pos` capture from there", for a piece known to be
+// of type `piece_type`. This is generate_moves' jump test for a single square,
+// without the move list: get_next_board_state only ever needed the yes/no, and
+// was calling the full generator into a throwaway buffer after every capture to
+// get it.
+int can_jump_from(long long p1, long long p2, long long p1k, long long p2k, int pos, int piece_type){
+    unsigned long long occupied = (unsigned long long)(p1 | p2 | p1k | p2k);
+    unsigned long long empty = ~occupied;
+    unsigned long long b = 1ull << pos;
+    unsigned long long enemy = (piece_type == 1 || piece_type == 3)
+                                  ? (unsigned long long)(p2 | p2k)
+                                  : (unsigned long long)(p1 | p1k);
+    int can_up = (piece_type != 2);
+    int can_down = (piece_type != 1);
+
+    if (can_up){
+        if (b & JUMP_COL_GE2 & (enemy << 9) & (empty << 18)) return 1;
+        if (b & JUMP_COL_LE5 & (enemy << 7) & (empty << 14)) return 1;
+    }
+    if (can_down){
+        if (b & JUMP_COL_GE2 & (enemy >> 7) & (empty >> 14)) return 1;
+        if (b & JUMP_COL_LE5 & (enemy >> 9) & (empty >> 18)) return 1;
+    }
     return 0;
 }
 

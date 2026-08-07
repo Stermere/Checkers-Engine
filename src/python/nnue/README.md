@@ -113,7 +113,7 @@ python src/python/nnue/export.py                       # -> nnue_weights.h
 
 ## Training hyperparameters
 ```bash
-python src/python/nnue/train.py --data src\python\nnue\data\selfplay_all.npz --out src/python/nnue/models/net.pt --l1 512 --l2 16 --epochs 150 --lr 0.001 --lambda 0.9 --piece-balance 0.7
+python src/python/nnue/train.py --data src\python\nnue\data\selfplay_all.npz --out src/python/nnue/models/net.pt --l1 512 --l2 32 --epochs 75 --lr 0.002 --lambda 0.9 --piece-balance 0.7 --piece-cap 3
 ```
 
 `train.py --data` takes several `.npz` files and works out each one's label

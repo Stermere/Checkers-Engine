@@ -388,6 +388,12 @@ def main():
 
             res = run_training(sets, cfg, score_req=score_req,
                                score_lam=args.score_lambda, verbose=False)
+            if res['stopped']:
+                # train.py turns Ctrl-C into a clean early stop, so the trial
+                # returned normally - but a trial that trained for three epochs
+                # of thirty is not a result, and recording it would poison both
+                # the ranking and --resume. Hand the interrupt back.
+                raise KeyboardInterrupt
             n_run += 1
 
             row = {

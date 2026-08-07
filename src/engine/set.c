@@ -49,11 +49,21 @@ struct set* create_set(){
 }
 
 // returns the number of bits in the given long
-// uses a bit hack to do this in constant time
 int get_bits_set(long long i) {
+#if defined(_MSC_VER)
+    // /arch:AVX2 implies POPCNT, and this runs at least once per node (the
+    // endgame database gate) plus twice per reduced move, so the twelve
+    // instruction SWAR sequence it replaces was not free. Keyed on the compiler
+    // for the same reason countTrailingZeros above is.
+    return (int)__popcnt64((unsigned long long)i);
+#elif defined(__GNUC__) || defined(__clang__)
+    return __builtin_popcountll((unsigned long long)i);
+#else
+    // portable fallback: the same bit hack, in constant time
     i = i - ((i >> 1) & 0x5555555555555555);
     i = (i & 0x3333333333333333) + ((i >> 2) & 0x3333333333333333);
     return (((i + (i >> 4)) & 0xF0F0F0F0F0F0F0F) * 0x101010101010101) >> 56;
+#endif
 }
 
 // print the set

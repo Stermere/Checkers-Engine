@@ -55,14 +55,37 @@ Metrics per set, by label type:
 The whole dataset lives on the GPU as an int32 index tensor, so there is no
 dataloader and no host/device copy in the training loop.
 
+**Starting from a saved net.** `--init` loads the weights out of an existing
+checkpoint instead of initialising randomly, which is what makes staged
+training possible: train on the tablebase set, then `--init` that net and train
+on midgame data. Only the weights carry over - the optimizer state and the LR
+schedule start fresh, because the second stage is a new run over different data
+and wants its own cycle, not the tail of the first one's. It is usually worth a
+lower `--lr` than the pretraining stage used.
+
+**Stopping early.** Ctrl-C stops after the current batch, validates, and lets
+that partial epoch take the checkpoint like any other before returning
+normally - so a run can be cut short without losing it, and picked up again
+with `--init`. A second Ctrl-C aborts immediately. Note that a net stopped
+mid-schedule is still at a high learning rate and is not a converged net; it is
+a starting point, not a result.
+
 Run:
     python src/python/nnue/train.py --data data/db_positions.npz
     python src/python/nnue/train.py \
         --data data/db_positions.npz data/selfplay_1m.npz --weights 1 2
+
+    # pretrain on the endgame, then fine-tune on the midgame
+    python src/python/nnue/train.py --data data/db_positions.npz \
+        --out models/endgame.pt
+    python src/python/nnue/train.py --data data/selfplay_1m.npz \
+        --init models/endgame.pt --lr 5e-4 --out models/net.pt
 """
 
 import argparse
 import os
+import shutil
+import signal
 import sys
 import time
 from dataclasses import dataclass
@@ -436,6 +459,9 @@ class TrainConfig:
     every trial.
     """
     out: str
+    #: checkpoint to take the starting weights from, None for a random init.
+    #: Weights only - see load_init().
+    init: str | None = None
     epochs: int = 30
     batch: int = 8192
     lr: float = 2e-3
@@ -467,6 +493,85 @@ class TrainConfig:
     # across values of this, for the same reason `--score-lambda` exists: the
     # target itself moves. Rank scale changes by mae_cp, or by games.
     eval_scale: float = EVAL_SCALE
+
+
+def load_init(path, cfg):
+    """The checkpoint `--init` names, checked against the net this run builds.
+
+    A shape mismatch is an error rather than something to adapt to. Adopting the
+    checkpoint's width would silently ignore `--l1`/`--l2`, which is exactly
+    wrong when the flags came from a shape sweep: every trial would train the
+    saved width and the sweep would report that width does not matter.
+
+    Only the weights are read. The optimizer state is deliberately not carried
+    over even though it would be easy to save - a fine-tune runs over different
+    data with its own OneCycle schedule, and Adam moments from a finished cycle
+    on a different distribution are not a head start on it.
+    """
+    ckpt = torch.load(path, weights_only=False, map_location='cpu')
+    l1, l2 = ckpt.get('l1', L1), ckpt.get('l2', L2)
+    if (l1, l2) != (cfg.l1, cfg.l2):
+        raise SystemExit(
+            f"--init {os.path.basename(path)} is a {l1}x{l2} net but this run "
+            f"builds {cfg.l1}x{cfg.l2}.\nPass --l1 {l1} --l2 {l2} to continue "
+            f"it, or drop --init to train the new shape from scratch.")
+
+    return ckpt
+
+
+class StopSignal:
+    """Ctrl-C stops the run at the next batch boundary instead of killing it.
+
+    Training runs for tens of minutes and the checkpoint on disk is only ever
+    the best epoch so far, so an abort throws away everything since that epoch -
+    including a partial epoch that may well be the best yet. Handling the signal
+    turns that into a clean stop: the batch loop breaks, the partial epoch is
+    validated and allowed to take the checkpoint, and `run_training` returns
+    normally with `stopped` set so the caller knows the run did not finish.
+
+    The second Ctrl-C restores the default handler and raises, so a run that has
+    somehow wedged itself between two batch boundaries can still be killed the
+    ordinary way.
+
+    Handlers are restored on exit, which matters for grid_search.py: it calls
+    `run_training` in a loop and needs its own KeyboardInterrupt back between
+    trials.
+    """
+
+    def __init__(self, log=print):
+        self.requested = False
+        self._log = log
+        self._prev = {}
+
+    def __enter__(self):
+        for name in ('SIGINT', 'SIGTERM', 'SIGBREAK'):
+            sig = getattr(signal, name, None)
+            if sig is None:
+                continue
+            try:
+                self._prev[sig] = signal.signal(sig, self._handle)
+            except (ValueError, OSError):
+                # not the main thread, or the platform will not take this one
+                pass
+        return self
+
+    def __exit__(self, *exc):
+        while self._prev:
+            sig, prev = self._prev.popitem()
+            try:
+                signal.signal(sig, prev)
+            except (ValueError, OSError):
+                pass
+        return False
+
+    def _handle(self, signum, frame):
+        if self.requested:
+            self.__exit__()
+            raise KeyboardInterrupt
+        self.requested = True
+        self._log("\nstopping after this batch - the partial epoch is still "
+                  "validated and still saved if it is the best so far "
+                  "(Ctrl-C again to abort now)")
 
 
 def run_training(sets, cfg, score_req=None, score_lam=None, log=print,
@@ -562,6 +667,27 @@ def run_training(sets, cfg, score_req=None, score_lam=None, log=print,
     model = CheckersNet(cfg.l1, cfg.l2).to(device)
     if verbose:
         log(describe(model))
+    if cfg.init:
+        init_ckpt = load_init(cfg.init, cfg)
+        model.load_state_dict(init_ckpt['state_dict'])
+        # the saved weights were clipped by the run that produced them, but a
+        # checkpoint from a build with different quantization bounds would not
+        # be - and this is what guarantees the padding row is still zero
+        model.clip_weights()
+        if verbose:
+            prev = init_ckpt.get('datasets') or ['?']
+            log(f"initialised from {cfg.init}\n"
+                f"  trained on {', '.join(prev)}, val loss "
+                f"{init_ckpt.get('val_loss', float('nan')):.4f}")
+            # not fatal, but worth saying out loud: the loaded output layer was
+            # trained to mean centipawns at one scale and is about to be
+            # trained against a target squashed at another
+            prev_scale = init_ckpt.get('eval_scale', cfg.eval_scale)
+            if abs(prev_scale - cfg.eval_scale) > 1e-9:
+                log(f"  NOTE: it was trained at eval_scale {prev_scale:g} and "
+                    f"this run uses {cfg.eval_scale:g}, so its output means "
+                    f"something different than the target it is about to be "
+                    f"trained against")
 
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr,
                             weight_decay=cfg.weight_decay)
@@ -574,57 +700,87 @@ def run_training(sets, cfg, score_req=None, score_lam=None, log=print,
     best_loss = float('inf')
     best_metrics = {}
     best_epoch = -1
+    stopped = False
+    epochs_done = 0
     t0 = time.time()
-    for epoch in range(cfg.epochs):
-        perm = torch.randperm(n_train, device=device)
-        total_loss = 0.0
+    with StopSignal(log) as stop:
+        for epoch in range(cfg.epochs):
+            perm = torch.randperm(n_train, device=device)
+            total_loss = 0.0
+            steps = 0
 
-        for s in range(0, n_train, cfg.batch):
-            b = perm[s:s + cfg.batch]
-            logits = model(tr_idx[b])
-            w = tr_weight[b]
-            loss = (loss_fn(logits, tr_target[b]) * w).sum() / w.sum()
+            for s in range(0, n_train, cfg.batch):
+                b = perm[s:s + cfg.batch]
+                logits = model(tr_idx[b])
+                w = tr_weight[b]
+                loss = (loss_fn(logits, tr_target[b]) * w).sum() / w.sum()
 
-            opt.zero_grad(set_to_none=True)
-            loss.backward()
-            opt.step()
-            sched.step()
-            model.clip_weights()
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                opt.step()
+                sched.step()
+                model.clip_weights()
 
-            total_loss += loss.item()
+                total_loss += loss.item()
+                steps += 1
+                if stop.requested:
+                    break
 
-        results = evaluate(model, val_sets, loss_fn, score_lam, cfg.eval_scale)
-        val_loss = combine_loss(results, score_sw)
-        flag = ''
-        if val_loss < best_loss:
-            best_loss = val_loss
-            best_epoch = epoch + 1
-            best_metrics = {d.name: m for d, _, m, _ in results}
-            flag = ' *'
-            torch.save({'state_dict': model.state_dict(),
-                        'l1': model.l1_size, 'l2': model.l2_size,
-                        'eval_scale': cfg.eval_scale, 'val_loss': val_loss,
-                        'datasets': [d.name for d in sets],
-                        'weights': list(req), 'lam': cfg.lam,
-                        'piece_balance': cfg.piece_balance,
-                        'val': best_metrics},
-                       cfg.out)
+            # A partial epoch is validated and allowed to take the checkpoint
+            # like any other. It is a fair comparison - the holdout does not
+            # care how many batches went into the weights - and it is the whole
+            # reason stopping early keeps the work rather than discarding it.
+            epochs_done = epoch + 1
+            results = evaluate(model, val_sets, loss_fn, score_lam, cfg.eval_scale)
+            val_loss = combine_loss(results, score_sw)
+            flag = ''
+            if val_loss < best_loss:
+                best_loss = val_loss
+                best_epoch = epoch + 1
+                best_metrics = {d.name: m for d, _, m, _ in results}
+                flag = ' *'
+                torch.save({'state_dict': model.state_dict(),
+                            'l1': model.l1_size, 'l2': model.l2_size,
+                            'eval_scale': cfg.eval_scale, 'val_loss': val_loss,
+                            'datasets': [d.name for d in sets],
+                            'weights': list(req), 'lam': cfg.lam,
+                            'piece_balance': cfg.piece_balance,
+                            # where the weights came from, so a staged run's
+                            # lineage survives in the file rather than only in
+                            # the shell history that produced it
+                            'init': cfg.init,
+                            'epoch': epoch + 1, 'epochs': cfg.epochs,
+                            'val': best_metrics},
+                           cfg.out)
 
-        if verbose:
-            line = (f"epoch {epoch + 1:3d}/{cfg.epochs}  "
-                    f"loss {total_loss / steps_per_epoch:.4f}  val {val_loss:.4f}")
-            for ds, _, m, _ in results:
-                line += f"  | {ds.name.split('.')[0]}: {fmt_metrics(ds.kind, m)}"
-            log(line + flag)
+            if verbose:
+                line = (f"epoch {epoch + 1:3d}/{cfg.epochs}  "
+                        f"loss {total_loss / max(steps, 1):.4f}  "
+                        f"val {val_loss:.4f}")
+                for ds, _, m, _ in results:
+                    line += f"  | {ds.name.split('.')[0]}: {fmt_metrics(ds.kind, m)}"
+                if steps < steps_per_epoch:
+                    line += f"  [stopped {steps:,}/{steps_per_epoch:,} batches in]"
+                log(line + flag)
+
+            if stop.requested:
+                stopped = True
+                break
 
     seconds = time.time() - t0
     if verbose:
-        log(f"\ntrained in {seconds:.0f}s, best combined val loss {best_loss:.4f}")
+        if stopped:
+            log(f"\nstopped after {epochs_done} of {cfg.epochs} epochs. The "
+                f"schedule never annealed, so this is a starting point rather "
+                f"than a finished net - continue it with --init {cfg.out}")
+        log(f"trained in {seconds:.0f}s, best combined val loss {best_loss:.4f} "
+            f"(epoch {best_epoch})")
 
     return {'val_loss': best_loss, 'best_epoch': best_epoch,
             'metrics': best_metrics, 'seconds': seconds,
             'val_sets': val_sets, 'model': model,
-            'params': model.num_params()}
+            'params': model.num_params(),
+            'stopped': stopped, 'epochs_done': epochs_done}
 
 
 def piece_breakdown(model, val_sets, log=print):
@@ -683,6 +839,16 @@ def main():
                          "all-tablebase set like db_positions.npz has to leave "
                          "--data instead")
     ap.add_argument('--out', default=os.path.join(NNUE_DIR, 'models', 'net.pt'))
+    ap.add_argument('--init', default=None,
+                    help="start from the weights in this checkpoint instead of "
+                         "a random init, which is what makes staged training "
+                         "possible: train on db_positions.npz, then --init that "
+                         "net and train on midgame data. Weights only - the "
+                         "optimizer and the LR schedule start fresh, so the "
+                         "second stage runs a full OneCycle of its own and "
+                         "usually wants a lower --lr than the first. The shape "
+                         "must match (--l1/--l2). If --out names the same file, "
+                         "it is copied to <out>.bak first")
 
     ap.add_argument('--epochs', type=int, default=30)
     ap.add_argument('--batch', type=int, default=8192)
@@ -727,8 +893,37 @@ def main():
               f"{len(args.data)} datasets")
         return 1
 
+    if args.init and not os.path.exists(args.init):
+        print(f"--init {args.init} does not exist")
+        return 1
+
     torch.manual_seed(args.seed)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+
+    # Continuing a net in place is a reasonable thing to ask for, but the first
+    # improving epoch overwrites the very weights the run started from, and the
+    # pretrained stage is then unrecoverable. Copy it aside rather than refuse:
+    # the stage that produced it may have cost hours.
+    if args.init and os.path.abspath(args.init) == os.path.abspath(args.out):
+        backup = args.out + '.bak'
+        shutil.copyfile(args.init, backup)
+        print(f"--init and --out are the same file; kept the starting net as "
+              f"{backup}")
+
+    cfg = TrainConfig(out=args.out, init=args.init,
+                      epochs=args.epochs, batch=args.batch,
+                      lr=args.lr, val_frac=args.val_frac, seed=args.seed,
+                      l1=args.l1, l2=args.l2, weight_decay=args.weight_decay,
+                      pct_start=args.pct_start, weights=args.weights,
+                      lam=args.lam, piece_balance=args.piece_balance,
+                      piece_cap=args.piece_cap, eval_scale=args.eval_scale)
+
+    # A shape mismatch is checked here as well as in run_training, because
+    # encoding 17M positions takes a minute and a wrong --l1 should not cost
+    # one. The result is thrown away; run_training loads it again and reports.
+    if cfg.init:
+        load_init(cfg.init, cfg)
+
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     if device == 'cpu':
@@ -746,21 +941,23 @@ def main():
         print(f"  {ds.name:<28} {len(ds):>9,} positions  labels={ds.kind}")
     print(f"loaded and encoded in {time.time() - t0:.1f}s")
 
-    cfg = TrainConfig(out=args.out, epochs=args.epochs, batch=args.batch,
-                      lr=args.lr, val_frac=args.val_frac, seed=args.seed,
-                      l1=args.l1, l2=args.l2, weight_decay=args.weight_decay,
-                      pct_start=args.pct_start, weights=args.weights,
-                      lam=args.lam, piece_balance=args.piece_balance,
-                      piece_cap=args.piece_cap, eval_scale=args.eval_scale)
     res = run_training(sets, cfg)
 
     # ---- breakdown by piece count, from the best checkpoint ----
     model = res['model']
     ckpt = torch.load(cfg.out, weights_only=False)
     model.load_state_dict(ckpt['state_dict'])
-    piece_breakdown(model, res['val_sets'])
+    try:
+        piece_breakdown(model, res['val_sets'])
+    except KeyboardInterrupt:
+        # the checkpoint is already on disk; only the report is being skipped
+        print("\n(breakdown skipped)")
 
-    print(f"\nsaved {cfg.out}")
+    # which epoch's weights are actually in the file, since "the best so far"
+    # is not the last one and after an early stop it may be well short of it
+    print(f"\nsaved {cfg.out} (epoch {ckpt['epoch']} of "
+          + (f"{res['epochs_done']}, run stopped early - continue it with "
+             f"--init {cfg.out})" if res['stopped'] else f"{cfg.epochs})"))
     return 0
 
 

@@ -13,13 +13,26 @@ parts are solved exactly once:
     built in `board_search.c`:
 
         [0] = (move_from, move_to)                       Py_BuildValue("ii")
-        [1] = (depth, extended_depth, nodes,
-               hash_entries, eval)                       Py_BuildValue("KKKKi")
+        [1] = (depth, max_ply, nodes,
+               hash_entries, eval, evals)                Py_BuildValue("iiLLiL")
 
     Existing callers index this as `results[-2]` and `results[-1][4]` (and also
     `results[1][4]`, which happens to be the same element because the list has
     length two). `SearchResult` gives the fields names so nothing has to rely on
     that coincidence.
+
+    **Field 1 is max_ply, not extended_depth.** They are different numbers:
+    extended_depth stops at the last node that still had depth budget left, while
+    max_ply counts the capture-only quiescence past the horizon too - which in
+    checkers is most of what "how deep did it look" means. The engine's own
+    printed report shows depth / ext / max ply side by side; only max_ply is
+    exported.
+
+    **Fields are read by index, not unpacked.** This tuple has grown twice, and
+    a positional unpack of a fixed arity turns every future addition into a
+    ValueError in the data generation scripts - which is exactly what happened
+    when `evals` was appended. New fields may only ever go on the END, and this
+    reader takes a prefix of what it is given.
 
   * **The eval sign.** `search_info->eval` comes from `negmax` at the root, and
     `get_eval` flips the sign for player 2, so the score is **from the side to
@@ -143,15 +156,28 @@ class SearchResult:
     see the module docstring.
     """
 
-    __slots__ = ('move_from', 'move_to', 'depth', 'extended_depth',
+    __slots__ = ('move_from', 'move_to', 'depth', 'max_ply',
                  'nodes', 'hash_entries', 'eval')
+
+    # how many leading elements of raw[1] this class knows how to name
+    _STATS_FIELDS = 5
 
     def __init__(self, raw):
         if len(raw) != 2:
             raise ValueError(f"unexpected search_position result shape: {raw!r}")
         (self.move_from, self.move_to) = raw[0]
-        (self.depth, self.extended_depth, self.nodes,
-         self.hash_entries, self.eval) = raw[1]
+        stats = raw[1]
+        # a PREFIX, deliberately: the engine appends new stats to the end of this
+        # tuple, and a positional unpack of a fixed arity would make every such
+        # addition a ValueError here - which is how `evals` broke the data
+        # generation scripts. Too few fields is still an error, since that means
+        # the layout changed rather than grew.
+        if len(stats) < self._STATS_FIELDS:
+            raise ValueError(
+                f"search_position stats tuple has {len(stats)} fields, "
+                f"expected at least {self._STATS_FIELDS}: {raw!r}")
+        (self.depth, self.max_ply, self.nodes,
+         self.hash_entries, self.eval) = stats[:self._STATS_FIELDS]
 
     @property
     def move(self):
@@ -160,7 +186,7 @@ class SearchResult:
 
     def __repr__(self):
         return (f"SearchResult(move={self.move}, eval={self.eval}, "
-                f"depth={self.depth}, ext={self.extended_depth}, "
+                f"depth={self.depth}, max_ply={self.max_ply}, "
                 f"nodes={self.nodes})")
 
 

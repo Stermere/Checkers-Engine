@@ -83,6 +83,15 @@ def main():
     if not want_avx2:
         sys.argv.remove("--no-avx2")
 
+    # Profile guided optimization was implemented here as a --pgo-gen/--pgo-use
+    # two pass build, measured, and removed: it was worth -2% (1.23x vs 1.25x
+    # against the same baseline, depth 15 over 12 openings), i.e. nothing outside
+    # the noise. The reason appears to be that there is nothing left for it to
+    # learn - the engine is a single translation unit already built with /GL and
+    # /LTCG, so the optimizer sees the whole program, and what the search waits on
+    # is memory and dependency chains rather than mispredicted branches. See
+    # src/python/nnue/STATUS.md for the numbers.
+
     # Two flag sets, because which compiler setuptools reaches for is a property
     # of the platform. The engine is a single translation unit, so the flags that
     # matter are whole-program optimization and the vector target; the rest is
