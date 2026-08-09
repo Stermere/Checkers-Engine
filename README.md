@@ -8,6 +8,9 @@ WebAssembly.
 no install. The engine is compiled to WebAssembly and runs entirely on your
 machine.
 
+There is also a desktop app for offline play, which bundles the endgame
+tablebase — see [the GUI repo](https://github.com/Stermere/Marcher_Engine_GUI#desktop-app).
+
 ## Strength
 
 About **-50 Elo against Kingsrow (x64) 1.19e at 0.5s per move**, which is a very
