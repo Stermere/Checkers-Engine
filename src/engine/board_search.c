@@ -19,7 +19,14 @@
 #undef max
 #define min(a,b) (((a)<(b))?(a):(b))
 #define max(a,b) (((a)>(b))?(a):(b))
+// Overridable so a host with no terminal can switch the engine's progress
+// reporting off at compile time (-D PRINT_OUTPUT=0). The browser build does:
+// there is nothing on the far end of stdout there, and the per-iteration "\r"
+// line costs a console write for every deepening step. Undefined everywhere
+// else, so the desktop build is unchanged.
+#ifndef PRINT_OUTPUT
 #define PRINT_OUTPUT 1
+#endif
 #define TERMINATE_EARLY_THRESHOLD 20
 
 // ---- score bands ----
@@ -636,6 +643,17 @@ _PYINIT_FUNC(void){
 
 #endif
 // End of python comunication code
+
+// Browser comunication code
+// The same idea as the block above and deliberately shaped like it: one host,
+// one #ifdef, no trace of it in any other build. It goes here because this is
+// after every declaration it needs (struct search_info, start_board_search,
+// end_board_search, n_ply_search) and before the iterative deepening loop that
+// calls the progress hook it declares.
+#ifdef WASM_API
+#include "wasm_api.c"
+#endif
+// End of browser comunication code
 
 
 // a function to round the float to 2 decimal places
@@ -1753,11 +1771,19 @@ struct search_info* start_board_search(long long p1, long long p2, long long p1k
     struct board_evaler* evaler = board_evaler_constructor(p1 | p1k, p2 | p2k, search_depth, search_time, start);
 
 #if USE_ENDGAME_DB
+  #ifdef ENDGAME_DB_NO_FILES
+    // A host with no filesystem pushes slices in through endgame_db_alloc_slice
+    // instead of the engine reading them, so all that is needed here is the
+    // index tables. Slices that have not arrived are NULL and probe_endgame_db
+    // simply misses them, which is why loading may lag the first search.
+    endgame_db_prepare();
+  #else
     // load the endgame tablebase once per process (no-op if the files are absent)
     {
         const char* db_dir = getenv("CHECKERS_DB_DIR");
         endgame_db_init(db_dir != NULL ? db_dir : "db", DB_MAX_TOTAL);
     }
+  #endif
 #endif
 
     unsigned long long int hash = get_hash(p1, p2, p1k, p2k, evaler->hash_table);
@@ -1869,6 +1895,10 @@ struct search_info* start_board_search(long long p1, long long p2, long long p1k
         if (PRINT_OUTPUT){
             printf("\rPLY: %d\t PLYEX: %d\t Eval: %d   ", depth, evaler->extended_depth, eval_);
         }
+#ifdef WASM_API
+        // the same progress report, to the only place a browser can show it
+        wasm_on_iteration(depth, max_ply, eval_);
+#endif
 
         // stop starting new iterations once the time budget is used up
         // (with the persistent transposition table, a partially completed deeper
@@ -1950,7 +1980,12 @@ struct search_info* start_board_search(long long p1, long long p2, long long p1k
     }
 
     // print the line of best moves to the terminal (deguggigng)
-    print_line(p1, p2, p1k, p2k, player, hash, evaler);
+    // guarded like every other report above it: this call sat outside the
+    // PRINT_OUTPUT block, so turning the flag off silenced the statistics but
+    // left the principal variation still being printed.
+    if (PRINT_OUTPUT){
+        print_line(p1, p2, p1k, p2k, player, hash, evaler);
+    }
 
     free(piece_loc);
 

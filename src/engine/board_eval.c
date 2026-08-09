@@ -142,7 +142,15 @@ struct board_evaler* board_evaler_constructor(long long p1_piece_loc, long long 
 #endif
     evaler->initial_piece_count_p1 = get_bits_set(p1_piece_loc);
     evaler->initial_piece_count_p2 = get_bits_set(p2_piece_loc);
-    long long int hash_table_size = 1ll << 22;
+    // Transposition table size in entries, log2. 22 is 4Mi entries = 64MB at
+    // 16 bytes an entry, which is the desktop engine. The browser build turns
+    // it down: a tab also holds the endgame slices and the page itself, and at
+    // the one second per move the GUI asks for, a table this large is never
+    // close to full anyway.
+#ifndef TT_ENTRIES_LOG2
+#define TT_ENTRIES_LOG2 22
+#endif
+    long long int hash_table_size = 1ll << TT_ENTRIES_LOG2;
     evaler->hash_table = init_hash_table(hash_table_size);
     evaler->draw_table = create_draw_table();
     evaler->killer_table = init_killer_table(search_depth);

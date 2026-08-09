@@ -70,6 +70,57 @@ with `--init`. A second Ctrl-C aborts immediately. Note that a net stopped
 mid-schedule is still at a high learning rate and is not a converged net; it is
 a starting point, not a result.
 
+**Reading the epoch line.** `loss` is the weighted training objective, `fit` is
+the held-in probe and `val` the holdout, and only the last two are comparable to
+each other - see the probe's construction in run_training(). `fit` ~ `val` means
+the net is underfitting and the answer is capacity or optimization; `fit` well
+below `val` means it is memorising and the answer is data or regularisation.
+Measured on the deployed shape and data, the two sit on top of each other.
+
+**The learning rate was three times too low, and that was the whole game.**
+`--lr` now defaults to 6e-3 rather than 2e-3. Measured on the full 18.2M row
+set at 512x32 over 30 epochs, holdout MAE:
+
+    lr 2e-3 (the old default), --piece-balance 0.7     38.40 cp
+    lr 2e-3, --piece-balance 0                         38.06
+    lr 6e-3, --piece-balance 0                        *36.49*
+    lr 4e-3, --batch 4096                              36.41   (best, 1.4x slower)
+    lr 1.6e-2                                          38.00
+
+The basin is broad and flat between 3e-3 and 8e-3 and is bracketed on both
+sides, so the default is an interior point rather than an edge. Batch size
+barely matters at this data size: 4096 and 8192 land within 0.1 cp of each
+other once the rate is right, and 8192 is the faster of the two, so it stays.
+
+Three things follow, and they all say the same thing - the binding constraint
+is how much optimizing gets done, not capacity, not data, and not precision:
+
+  * `--epochs 60` was worth -0.8 cp at the old rate and **nothing** at the
+    tuned one. It was buying step count, which the rate now supplies.
+  * `--weight-decay` does nothing measurable at any value tried, including 0
+    and 1e-4, which is what a net nowhere near overfitting looks like.
+  * `--piece-balance 0.7` *costs* ~0.4 cp against leaving it off. It is off by
+    default and should stay off; see piece_balance_weights for why the idea is
+    appealing and why it still does not pay.
+
+**Three mechanisms were built for this and all measured null; none are in the
+tree.** A bias-corrected weight EMA, quantization-aware training against
+export.py's exact fixed point grid, and selecting the epoch on mae_cp instead of
+loss. Each was measured at two data scales and against the *tuned* recipe, since
+a trick that only helps an undertrained net is a slower way of fixing the
+learning rate. At 18.2M rows: EMA 36.92 against a 36.92 baseline (identical to
+three decimals - a 100 step average against 4,440 steps an epoch is a no-op by
+the time the epoch ends), QAT 37.28, select=mae 36.88. Kept here as a result,
+not as documentation.
+
+The QAT null is the informative one, because it says the quantization contract
+is not costing anything: on a trained net the float and int16 holdout MAEs
+differ by **0.03 cp**. The +0.8 cp this file's history records was a different
+net, and a random net with large weights does show 6.6 cp - so the headroom is
+real in principle and absent in practice. Anything proposing to buy strength by
+changing the precision (int8 hidden weights, a wider QUANT_W) is chasing three
+hundredths of a centipawn.
+
 Run:
     python src/python/nnue/train.py --data data/db_positions.npz
     python src/python/nnue/train.py \
@@ -464,7 +515,8 @@ class TrainConfig:
     init: str | None = None
     epochs: int = 30
     batch: int = 8192
-    lr: float = 2e-3
+    #: must match the --lr default below, for the reason piece_cap records
+    lr: float = 6e-3
     val_frac: float = 0.05
     seed: int = 0
     l1: int = L1
@@ -478,7 +530,12 @@ class TrainConfig:
     # how far to flatten each set's piece-count distribution; 0 is off.
     # See piece_balance_weights.
     piece_balance: float = 0.0
-    piece_cap: float = 8.0
+    #: must match the --piece-cap default below. It did not: this was 8.0 while
+    #: the flag said 3.0, so `--piece-balance 0.5` through train.py and the same
+    #: value through grid_search.py (which builds a TrainConfig directly) were
+    #: two different experiments, and only one of them is what the deployed
+    #: nets were trained under.
+    piece_cap: float = 3.0
     # centipawns per logit. Two distinct jobs are wearing one number here, and
     # it is worth knowing which is which before sweeping it:
     #   * here, in training, it decides how hard sigmoid(cp / scale) squashes
@@ -628,6 +685,16 @@ def run_training(sets, cfg, score_req=None, score_lam=None, log=print,
                 # what you get by always predicting 0.0 - the number to beat
                 log(f"  {ds.name}: predict-zero baseline {np.abs(cp).mean():.1f} cp")
 
+    # A held-in probe, scored exactly like the holdout: same size, same unweighted
+    # combine, same targets - the only difference is that the model trained on
+    # these rows. `loss` on the epoch line cannot play this role, because it is
+    # the *weighted* training objective (blend x piece balance) and the holdout
+    # is unweighted, so the two are not on the same scale and their gap says
+    # nothing. This pair is comparable, and it is the measurement the standing
+    # "the net underfits" claim rests on.
+    probe_sets = [split(tr, min(len(va), len(tr)))[1]
+                  for tr, va in zip(train_sets, val_sets)] if verbose else []
+
     tr_idx = torch.cat([d.idx for d in train_sets])
     tr_target = torch.cat([d.blended_target(cfg.lam, cfg.eval_scale)
                            for d in train_sets])
@@ -731,8 +798,12 @@ def run_training(sets, cfg, score_req=None, score_lam=None, log=print,
             # care how many batches went into the weights - and it is the whole
             # reason stopping early keeps the work rather than discarding it.
             epochs_done = epoch + 1
-            results = evaluate(model, val_sets, loss_fn, score_lam, cfg.eval_scale)
+            results = evaluate(model, val_sets, loss_fn, score_lam,
+                               cfg.eval_scale)
             val_loss = combine_loss(results, score_sw)
+            held_in = combine_loss(
+                evaluate(model, probe_sets, loss_fn, score_lam,
+                         cfg.eval_scale), score_sw) if verbose else 0.0
             flag = ''
             if val_loss < best_loss:
                 best_loss = val_loss
@@ -745,6 +816,9 @@ def run_training(sets, cfg, score_req=None, score_lam=None, log=print,
                             'datasets': [d.name for d in sets],
                             'weights': list(req), 'lam': cfg.lam,
                             'piece_balance': cfg.piece_balance,
+                            # the optimizer recipe, so a checkpoint can be told
+                            # apart from one trained under different settings
+                            'lr': cfg.lr, 'batch': cfg.batch,
                             # where the weights came from, so a staged run's
                             # lineage survives in the file rather than only in
                             # the shell history that produced it
@@ -756,7 +830,7 @@ def run_training(sets, cfg, score_req=None, score_lam=None, log=print,
             if verbose:
                 line = (f"epoch {epoch + 1:3d}/{cfg.epochs}  "
                         f"loss {total_loss / max(steps, 1):.4f}  "
-                        f"val {val_loss:.4f}")
+                        f"fit {held_in:.4f}  val {val_loss:.4f}")
                 for ds, _, m, _ in results:
                     line += f"  | {ds.name.split('.')[0]}: {fmt_metrics(ds.kind, m)}"
                 if steps < steps_per_epoch:
@@ -783,7 +857,7 @@ def run_training(sets, cfg, score_req=None, score_lam=None, log=print,
             'stopped': stopped, 'epochs_done': epochs_done}
 
 
-def piece_breakdown(model, val_sets, log=print):
+def piece_breakdown(model, val_sets, log=print, eval_scale=float(EVAL_SCALE)):
     """Where the error actually lives, from the best checkpoint."""
     for ds in val_sets:
         logits = infer(model, ds.idx)
@@ -796,7 +870,7 @@ def piece_breakdown(model, val_sets, log=print):
             score = (pred == ds.label).float().cpu().numpy()
             unit = lambda v: f"{v:.3%} correct"
         else:
-            score = (logits * EVAL_SCALE - ds.label).abs().cpu().numpy()
+            score = (logits * eval_scale - ds.label).abs().cpu().numpy()
             unit = lambda v: f"{v:.1f} cp mae"
         for pc in sorted(set(ds.pieces.tolist())):
             m = ds.pieces == pc
@@ -852,7 +926,11 @@ def main():
 
     ap.add_argument('--epochs', type=int, default=30)
     ap.add_argument('--batch', type=int, default=8192)
-    ap.add_argument('--lr', type=float, default=2e-3)
+    # Measured, not inherited. 2e-3 was three times too low: on the full 18.2M
+    # row set at 512x32, holdout MAE went 38.06 -> 36.49 cp simply by raising
+    # this, and the curve is a broad flat basin from 3e-3 to 8e-3 with both
+    # ends of it bracketed. See the "Optimization" note at the top of the file.
+    ap.add_argument('--lr', type=float, default=6e-3)
     ap.add_argument('--val-frac', type=float, default=0.05)
     ap.add_argument('--limit', type=int, default=0,
                     help="use only the first N positions of each set (smoke tests)")
@@ -948,7 +1026,7 @@ def main():
     ckpt = torch.load(cfg.out, weights_only=False)
     model.load_state_dict(ckpt['state_dict'])
     try:
-        piece_breakdown(model, res['val_sets'])
+        piece_breakdown(model, res['val_sets'], eval_scale=cfg.eval_scale)
     except KeyboardInterrupt:
         # the checkpoint is already on disk; only the report is being skipped
         print("\n(breakdown skipped)")

@@ -1,0 +1,88 @@
+# Build the browser engine and publish it for the GUI repo to deploy.
+#
+# The site is served from Stermere/Marcher_Engine_GUI, but the engine source
+# lives here, so the two are joined by a release asset rather than by committing
+# a .wasm into the GUI repo. That keeps the deployed engine locked to the engine
+# source it was built from, and keeps binaries out of both git histories.
+#
+# The verification step is the point of running this in CI at all: development
+# defaults to the Flask/native path (see EngineClient.js), so nobody exercises
+# the browser engine by accident. This is what notices if it breaks.
+
+name: engine-wasm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/engine/**'
+      - 'src/wasm/**'
+      - 'src/python/verify_identical.py'
+      - '.github/workflows/engine-wasm.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write        # needed to update the release asset
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          # pinned: the stack size flag and the SSE2 translation layer have both
+          # moved between releases, and this is the version the build was
+          # verified against
+          version: '6.0.6'
+          actions-cache-folder: emsdk-cache
+
+      - name: Build
+        run: bash src/wasm/build_wasm.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the native engine to compare against
+        # setuptools is NOT bundled with Python 3.12+, and Package_engine.py is a
+        # setup.py script - without this the build fails on the import
+        run: |
+          python -m pip install --upgrade pip setuptools
+          python src/python/Package_engine.py build --force
+
+      - name: Verify the browser engine matches the native engine
+        # perft, static evaluation and fixed-depth search over the same fixtures.
+        # There is no floating point in the search, so this is an equality test:
+        # any difference at all is a bug.
+        run: node src/wasm/verify_wasm.mjs
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd src/wasm/dist
+          tar -czf marcher-wasm.tar.gz marcher.js marcher.wasm \
+                                       marcher-scalar.js marcher-scalar.wasm
+          # a rolling tag: the GUI deploy always wants the current engine, and
+          # keeping one asset avoids a version to bump in two repos
+          gh release delete engine-latest --yes --cleanup-tag || true
+          gh release create engine-latest marcher-wasm.tar.gz \
+            --title "Browser engine (latest)" \
+            --notes "Built from ${{ github.sha }} by .github/workflows/engine-wasm.yml"
+
+      - name: Ask the GUI repo to redeploy
+        # without this the site keeps serving the previous engine until
+        # something else pushes there
+        env:
+          GH_TOKEN: ${{ secrets.GUI_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "GUI_DISPATCH_TOKEN not set - skipping redeploy trigger."
+            echo "Add a fine-grained PAT with Contents:write on Marcher_Engine_GUI"
+            echo "to enable automatic redeploys."
+            exit 0
+          fi
+          gh api repos/Stermere/Marcher_Engine_GUI/dispatches \
+            -f event_type=engine-updated

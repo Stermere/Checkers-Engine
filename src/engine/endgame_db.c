@@ -128,6 +128,7 @@ int probe_endgame_db(long long p1, long long p2, long long p1k, long long p2k, i
     return 1;
 }
 
+#ifndef ENDGAME_DB_NO_FILES
 // try to load every slice file up to max_total pieces from dir. safe to call once.
 void endgame_db_init(const char* dir, int max_total){
     if (DB_INIT_DONE) return;
@@ -182,6 +183,69 @@ void endgame_db_init(const char* dir, int max_total){
         printf("endgame db: loaded %d slices (up to %d pieces)\n", loaded, DB_LOADED_MAX);
     }
 }
+#endif  // !ENDGAME_DB_NO_FILES
+
+#ifdef ENDGAME_DB_MEM_LOAD
+// ---------------------------------------------------------------------------
+// host-fed slice loading, for a build with no filesystem to read
+// ---------------------------------------------------------------------------
+// The browser cannot fopen anything, so the slices arrive as bytes the host has
+// already fetched. The direction matters: the engine allocates the buffer and
+// hands it back to be filled, rather than taking a pointer to bytes the host
+// holds. Copying from a host buffer would mean two copies of a slice alive at
+// once, and with 18MB of tablebase whose largest member is 1.6MB, that is the
+// difference between a 1.6MB transient and an 18MB one.
+
+// bring the index tables up without touching a filesystem. Sets DB_INIT_DONE so
+// that a build which still has endgame_db_init cannot later memset over live
+// pointers.
+void endgame_db_prepare(void){
+    if (DB_INIT_DONE) return;
+    DB_INIT_DONE = 1;
+    db_init_binomials();
+    memset(DB_SLICE, 0, sizeof(DB_SLICE));
+    memset(DB_DTW, 0, sizeof(DB_DTW));
+}
+
+// A writable buffer of exactly the right size for this slice, already
+// registered; NULL if the material is out of range, if len disagrees with what
+// the indexing says the slice must be, or if the allocation failed.
+//
+// The length check is the important part. A truncated download would otherwise
+// be indexed as though it were whole, and db_get_packed would answer "proven
+// win" out of uninitialised memory - a wrong answer the search trusts
+// absolutely, because a database probe outranks every heuristic score. Better
+// to refuse the slice and search normally.
+void* endgame_db_alloc_slice(int m1, int k1, int m2, int k2, int is_dtw, int len){
+    endgame_db_prepare();
+    if (m1 < 0 || k1 < 0 || m2 < 0 || k2 < 0) return NULL;
+    if (m1 > DB_MAX_GROUP || k1 > DB_MAX_GROUP ||
+        m2 > DB_MAX_GROUP || k2 > DB_MAX_GROUP) return NULL;
+    if (m1 + k1 < 1 || m2 + k2 < 1) return NULL;
+    if (m1 + k1 + m2 + k2 > DB_MAX_TOTAL) return NULL;
+
+    long long size = db_slice_size(m1, k1, m2, k2);
+    long long want = is_dtw ? size : (size + 3) / 4;
+    if ((long long)len != want) return NULL;
+
+    unsigned char** slot = is_dtw ? &DB_DTW[m1][k1][m2][k2]
+                                  : &DB_SLICE[m1][k1][m2][k2];
+    if (*slot != NULL) return *slot;   // idempotent: this slice is already here
+
+    unsigned char* buf = (unsigned char*)malloc((size_t)want);
+    if (buf == NULL) return NULL;
+    *slot = buf;
+
+    // only a win/loss/draw slice raises the piece count the database can answer
+    // for. A distance table with no WLD table behind it is never read at all -
+    // probe_endgame_db returns on the NULL DB_SLICE before it looks at DB_DTW.
+    if (!is_dtw){
+        int total = m1 + k1 + m2 + k2;
+        if (total > DB_LOADED_MAX) DB_LOADED_MAX = total;
+    }
+    return buf;
+}
+#endif  // ENDGAME_DB_MEM_LOAD
 
 // largest piece count the loaded database can answer for
 int endgame_db_max_pieces(){

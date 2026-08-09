@@ -18,5 +18,9 @@ src/python/nnue/nnue_weights.h
 
 # endgame db
 db/
+db.tar.gz
+
+# WebAssembly build outputs
+src/wasm/dist/
 # candidate NNUE weights written by src/python/nnue/match_net.py
 src/engine/nnue_weights_candidate.h
