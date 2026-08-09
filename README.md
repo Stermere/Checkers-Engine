@@ -1,27 +1,72 @@
 # Checkers-Engine (Marcher Engine)
-This engine uses the neg-max algorithm with alpha-beta pruning and several other optimizations to compute the best move for a position. In its current state, it is a solid player. The best and easiest way to play against it is to visit its web app at [my website](https://ckees1.pythonanywhere.com) the source code for which is also available on my GitHub!
 
-## Web Application
+A strong checkers engine written in C, with an nnue and an endgame
+tablebase. It runs natively as a Python extension, and in the browser as
+WebAssembly.
 
-For an optimal experience, play against the Marcher Engine through the web application:
+**[Play it here](https://stermere.github.io/Marcher_Engine_GUI/)** — no server,
+no install. The engine is compiled to WebAssembly and runs entirely on your
+machine.
 
-- **Web App**: [Play Here](https://ckees1.pythonanywhere.com)
+## Strength
 
-The Web App's max playing strength is strong but not unbeatable by any measure, for better play run the engine locally with a larger time control.
+About **-50 Elo against Kingsrow (x64) 1.19e at 0.5s per move**, which is a very
+strong reference. both engines were configured to use a single thread and a 64 MB transposition table
+when this measurment was made. The browser build measures **1.8x slower than the native build** (1.7M vs 3.1M nodes/s) so expect slightly lower strength in the browser. The engine is tuned to play at a variety of levels, from beginner to master - that said even the "beginner" level can be a challenge for casual players.
 
-## How to set up to play against 
-1. **Clone the repository:**
-   - Run the following command to clone the repository from GitHub:
-     ```
-     git clone https://github.com/Stermere/Checkers-Engine
-     ```
+## Play locally
 
-2. **Run `initVenv.bat`:**
-   - Navigate to the directory where you cloned the repository in the previous step.
-   - Run the `initVenv.bat` script. This will set up a Virtual environment and install the requirements.
+```bash
+git clone https://github.com/Stermere/Checkers-Engine
+cd Checkers-Engine
+initVenv.bat        # virtualenv + requirements
+build.bat           # compile the C into a Python module
+run.bat             # serve the web app on localhost
+```
 
-3. **Run `build.bat`:** (Skip this step if not modifying the C code)
-   - After initializing the virtual environment, run the `build.bat` script. This will Package the C code into a Python module
+Local play is stronger than the web app especially if given a larger time budget by modifying `Marcher_Engine_GUI\flask-server\server.py` line 8.
 
-4. **Run `run.bat`:**
-   - Finally, to play against Marcher Engine on your local machine, execute the `run.bat` script. This script will host the website on your local network. 
+## Build for the browser
+
+Needs the [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html).
+
+```bash
+source ~/emsdk/emsdk_env.sh
+bash src/wasm/build_wasm.sh     # SIMD build, scalar fallback, verification build
+node src/wasm/verify_wasm.mjs   # must print PASS
+bash src/wasm/copy_to_gui.sh    # drop it into the GUI checkout to run it
+```
+
+Pushing to `main` builds, verifies and publishes this automatically — see
+`.github/workflows/engine-wasm.yml`.
+
+## Testing
+
+Two gates, both equality tests rather than similarity tests:
+
+```bash
+python src/python/verify_identical.py --full   # two native builds must agree
+node src/wasm/verify_wasm.mjs                  # wasm must agree with native
+```
+
+Both compare perft, static evaluation, and fixed-depth search — including
+**node counts**, which is the load-bearing part. Equal node counts at equal
+depth mean two builds walked the identical tree, cutoffs and all.
+
+Before changing the engine, build a baseline to compare against *first*:
+
+```bash
+python src/python/Package_engine.py build --force --name search_engine_ref
+```
+
+`src/python/bot_vs_bot.py` runs engine-vs-engine matches for Elo.
+
+## Layout
+
+```
+src/engine/     the engine (C)
+src/python/     build script, tooling, and the NNUE training pipeline
+src/wasm/       WebAssembly build and verification
+db/             endgame tablebase (generated, not in git)
+Marcher_Engine_GUI/   the web app (submodule)
+```
