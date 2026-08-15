@@ -14,8 +14,17 @@ tablebase — see [the GUI repo](https://github.com/Stermere/Marcher_Engine_GUI#
 ## Strength
 
 About **-50 Elo against Kingsrow (x64) 1.19e at 0.5s per move**, which is a very
-strong reference. both engines were configured to use a single thread and a 64 MB transposition table
-when this measurment was made. The browser build measures **1.8x slower than the native build** (1.7M vs 3.1M nodes/s) so expect slightly lower strength in the browser. The engine is tuned to play at a variety of levels, from beginner to master - that said even the "beginner" level can be a challenge for casual players.
+strong reference. Both engines were configured to use a single thread and a 64 MB
+transposition table when this measurement was made. The browser build measures **1.8x slower than the native build** (1.7M vs 3.1M nodes/s) so expect slightly lower strength in the browser.
+
+## Training data
+
+The shipped NNUE learned from about 22M positions, and Kingsrow(x64) 1.19e was
+used as an opponent in the training pipeline.
+
+No Kingsrow code is included or redistributed here — `src/python/nnue/kingsrow.py`
+loads it at runtime through the public CheckerBoard engine DLL API, from a local
+CheckerBoard install you supply yourself.
 
 ## Play locally
 
@@ -73,3 +82,8 @@ src/wasm/       WebAssembly build and verification
 db/             endgame tablebase (generated, not in git)
 Marcher_Engine_GUI/   the web app (submodule)
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE). Use it in anything, including commercially; just
+keep the copyright notice. The GUI submodule is MIT as well.
